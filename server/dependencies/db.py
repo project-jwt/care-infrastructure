@@ -1,3 +1,4 @@
-# TODO: get_db dependency that yields a pooled psycopg connection per request.
+# TODO: get_db dependency that yields an AsyncSession per request.
+# Commit or rollback in the caller (or use session.begin() context manager in the caller).
 
-from db.pool import pool
+from db.engine import AsyncSessionLocal
