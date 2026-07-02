@@ -6,9 +6,11 @@ A voice-first tool for adults 65+: the primary user speaks an issue, AI turns it
 
 ## Stack
 
-- **Backend:** Python 3 + FastAPI, JWT auth, raw SQL via `psycopg` pool
+- **Backend:** Python 3 + FastAPI, JWT auth, SQLAlchemy 2.0 async + asyncpg
 - **Frontend:** React + Vite
 - **Database:** Postgres
+- **LLM:** Google Gemini (`gemini-2.0-flash`) via `google-generativeai`
+- **Email:** Resend via `resend`
 - **Deploy target:** Render
 
 ## Python differences to consider
@@ -29,7 +31,7 @@ care-infrastructure/
 │
 ├── server/                               # FastAPI app
 │   ├── main.py                           # builds the FastAPI app and registers every router under /api
-│   ├── config.py                         # Settings loaded from .env (DB url, JWT secret/alg/expiry)
+│   ├── config.py                         # Settings loaded from .env (DB url, JWT secret/alg/expiry, Gemini + Resend keys)
 │   ├── requirements.txt                  # backend Python dependencies
 │   │
 │   ├── routers/                          # HTTP handlers — one file per resource (same idea as "controllers")
@@ -40,7 +42,7 @@ care-infrastructure/
 │   │   ├── received_summaries.py         # /api/received-summaries (contact only)
 │   │   └── helplines.py                  # /api/helplines
 │   │
-│   ├── models/                           # raw-SQL query functions, one file per table group
+│   ├── models/                           # SQLAlchemy declarative models + async query helpers, one file per table group
 │   │   ├── user_model.py                 # users table
 │   │   ├── summary_model.py              # summaries + summary_recipients
 │   │   ├── contact_model.py              # trusted_contact_links
@@ -55,15 +57,17 @@ care-infrastructure/
 │   │
 │   ├── dependencies/                     # FastAPI Depends() — replaces middleware for per-route concerns
 │   │   ├── auth.py                       # get_current_user, require_primary, require_contact
-│   │   └── db.py                         # get_db — yields a pooled psycopg connection
+│   │   └── db.py                         # get_db — yields an AsyncSession per request
 │   │
 │   ├── core/
-│   │   └── security.py                   # password hashing (bcrypt) + JWT encode/decode
+│   │   ├── security.py                   # password hashing (bcrypt) + JWT encode/decode
+│   │   ├── ai.py                         # Gemini client + draft_summary(transcript, answers)
+│   │   └── email.py                      # Resend client + send_summary_email(to, summary_text)
 │   │
 │   └── db/
-│       ├── pool.py                       # psycopg_pool.ConnectionPool built from settings
-│       ├── schema.sql                    # CREATE TABLE statements for all spec tables
-│       └── seed.py                       # applies schema.sql and inserts seed rows
+│       ├── base.py                       # SQLAlchemy DeclarativeBase every model inherits from
+│       ├── engine.py                     # async engine + AsyncSessionLocal factory
+│       └── seed.py                       # creates tables via Base.metadata + inserts seed rows
 │
 └── frontend/                             # React + Vite app
     ├── package.json                      # dev/build/preview scripts + React/Vite deps
