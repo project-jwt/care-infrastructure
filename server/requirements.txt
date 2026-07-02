@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+psycopg[binary,pool]
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
