@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # Optional — sensible defaults for local dev.
     jwt_algorithm: str = "HS256"       # HMAC-SHA256, the standard symmetric JWT alg
-    jwt_expire_minutes: int = 60 * 24  # tokens live 24h, then the user logs in again
+    jwt_expire_minutes: int = 60 * 24 * 7  # tokens live 7 days, then the user logs in again
 
     # Blank until we build the AI-draft and email-send features.
     gemini_api_key: str = ""
