@@ -10,6 +10,7 @@ from sqlalchemy import CheckConstraint, DateTime, Text, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from core.security import verify_password
 from db.base import Base
 
 
@@ -119,3 +120,18 @@ async def mark_setup_complete(session: AsyncSession, user_id: int) -> User | Non
     """Flip has_completed_setup to true (PATCH /api/users/me/setup).
     Just a named special case of update(), so the router reads as intent."""
     return await update(session, user_id, has_completed_setup=True)
+
+
+async def validate_password(session: AsyncSession, email: str, password: str) -> User | None:
+    """The login check: find the account by email, compare the attempt against
+    its stored bcrypt hash. Returns the User on success, None on ANY failure.
+
+    "No such email" and "wrong password" both collapse into the same None ON
+    PURPOSE, so the login endpoint can't be used to probe which emails have
+    accounts (see spec: single 'Invalid credentials' 401). Don't refactor this
+    into distinct return values.
+    """
+    user = await find_by_email(session, email)
+    if user is None or not verify_password(password, user.password_hash):
+        return None
+    return user
