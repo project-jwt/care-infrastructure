@@ -13,6 +13,19 @@ A voice-first tool for adults 65+: the primary user speaks an issue, AI turns it
 - **Email:** Resend via `resend`
 - **Deploy target:** Render
 
+## Team workflow
+
+Branches: `pre-prod` is the integration branch — all feature PRs target it. `main` is the stable branch — it only receives promotion PRs from `pre-prod` and is what Render deploys.
+
+1. Move your assigned ticket to **In Progress** on the board.
+2. Branch from fresh `pre-prod`: `git checkout pre-prod && git pull && git checkout -b your-name/feature-name`.
+3. Use [Conventional Commits](https://www.conventionalcommits.org): `feat: …`, `fix: …`, `docs: …`, `chore: …` — with an optional scope like `feat(server): …`.
+4. Open the PR early **to `pre-prod`** (draft is fine), fill out the template, move the ticket to **In Review**.
+5. Tag one teammate for review. Reviews are substantive: ask about unclear code, flag potential breaks, suggest improvements. Reviews are due within 24 hours — anything older gets raised in the daily stand-down.
+6. Reviewer approves → author merges (merge commit) and deletes the branch; ticket to **Done**.
+7. Promotion: when `pre-prod` is stable (at minimum before each deploy milestone), open a PR from `pre-prod` → `main`. `main` must always run; every merge to `main` auto-deploys to Render — check the deploy after merging.
+8. No direct pushes to `main` or `pre-prod` — branch protection blocks them, including for admins.
+
 ## Python differences to consider
 
 **1. Pydantic schemas are a required extra layer.** In Express we wrote `if (!username) return res.status(400)` by hand in each controller. In FastAPI, you declare a Pydantic model for the request body and the framework validates it before your handler runs. Same idea for response bodies — declare the shape, FastAPI serializes it. This is the `server/schemas/` folder.
