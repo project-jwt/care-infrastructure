@@ -20,4 +20,9 @@ class CamelModel(BaseModel):
         # User), not just from dicts. This is what lets response_model=UserOut
         # accept the ORM object a route returns.
         from_attributes=True,
+        # Unknown JSON fields are a 422, not a silent drop — so a client
+        # sending { "role": "primary" } to PATCH /me learns it did nothing.
+        # (Harmless for response schemas: from_attributes only reads declared
+        # fields off the ORM object, so extra attributes never count as "extra".)
+        extra="forbid",
     )

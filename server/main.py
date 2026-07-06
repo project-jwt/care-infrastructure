@@ -12,9 +12,10 @@ from fastapi.responses import JSONResponse
 from db.base import Base
 from db.engine import engine
 
-# Importing a model registers its table in Base.metadata (see db/base.py) —
-# without this line, create_all below wouldn't know the users table exists.
-import models.user_model  # noqa: F401
+# Importing the models package registers every table in Base.metadata —
+# models/__init__.py imports each model module, so new models added there
+# are picked up by create_all with no change to this file.
+import models  # noqa: F401
 from routers import auth, users
 
 

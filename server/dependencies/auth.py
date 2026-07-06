@@ -37,11 +37,14 @@ async def get_current_user(
 
     try:
         payload = decode_token(credentials.credentials)  # .credentials = the raw token
-    except JWTError:  # bad signature, expired, or garbage — one answer for all
+        user_id = int(payload["sub"])  # sub is a string (JWT spec) — int() it back
+    except (JWTError, KeyError, ValueError):
+        # JWTError: bad signature, expired, garbage. KeyError/ValueError: valid
+        # signature but no sub / non-numeric sub — still "bad token", still 401,
+        # never a 500.
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    # sub is a string (JWT spec) — int() it back into our user id.
-    user = await user_model.find(session, int(payload["sub"]))
+    user = await user_model.find(session, user_id)
     if user is None:  # valid token for an account that no longer exists
         raise HTTPException(status_code=401, detail="User not found")
 

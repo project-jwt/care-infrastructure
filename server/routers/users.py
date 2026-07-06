@@ -4,6 +4,7 @@
 # nobody can read anyone else's account, so the route path doesn't even offer it.
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import hash_password
@@ -48,7 +49,12 @@ async def update_me(
         if await user_model.find_by_email(session, fields["email"]):
             raise HTTPException(status_code=409, detail="Email already registered")
 
-    return await user_model.update(session, user.id, **fields)
+    try:
+        return await user_model.update(session, user.id, **fields)
+    except IntegrityError:
+        # Race: the email check above can pass while a concurrent request takes
+        # the address; the UNIQUE constraint catches it — same 409.
+        raise HTTPException(status_code=409, detail="Email already registered")
 
 
 @router.patch("/me/setup", response_model=SetupOut)

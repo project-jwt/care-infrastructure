@@ -5,7 +5,7 @@
 # password_hash and created_at have no slot here, so they cannot leak —
 # an allowlist, not a "remember to delete the hash" blocklist.
 
-from pydantic import EmailStr
+from pydantic import EmailStr, Field
 
 from schemas.base import CamelModel
 
@@ -27,7 +27,9 @@ class UserUpdate(CamelModel):
 
     full_name: str | None = None
     email: EmailStr | None = None
-    password: str | None = None
+    # Same 8-char floor as RegisterIn — rules apply wherever passwords are SET
+    # (never on LoginIn, which must accept whatever was registered).
+    password: str | None = Field(default=None, min_length=8)
 
 
 class SetupOut(CamelModel):

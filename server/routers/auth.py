@@ -6,6 +6,7 @@
 # model, session plumbing in dependencies. Handlers are just the wiring.
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import create_access_token, hash_password
@@ -28,13 +29,18 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_db)):
     if await user_model.find_by_email(session, body.email):
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    user = await user_model.create(
-        session,
-        email=body.email,
-        password_hash=hash_password(body.password),  # raw password dies here
-        full_name=body.full_name,
-        role=body.role,
-    )
+    try:
+        user = await user_model.create(
+            session,
+            email=body.email,
+            password_hash=hash_password(body.password),  # raw password dies here
+            full_name=body.full_name,
+            role=body.role,
+        )
+    except IntegrityError:
+        # Race: two same-email registrations can both pass the check above; the
+        # DB's UNIQUE constraint catches the loser — translate to the same 409.
+        raise HTTPException(status_code=409, detail="Email already registered")
     # Newly registered = logged in: mint their first token right away.
     return AuthOut(token=create_access_token(user.id, user.role), user=user)
 

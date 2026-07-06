@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import EmailStr
+from pydantic import EmailStr, Field
 
 from schemas.base import CamelModel
 from schemas.user import UserOut
@@ -13,7 +13,10 @@ class RegisterIn(CamelModel):
     All fields required (no defaults), so a missing one -> 422 automatically."""
 
     email: EmailStr
-    password: str
+    # Minimum length only, no complexity rules — team decision 2026-07-06:
+    # empty passwords were registrable before; composition rules hurt 65+
+    # users more than they help security.
+    password: str = Field(min_length=8)
     full_name: str  # arrives as "fullName" in JSON (CamelModel alias)
     # Literal = the API-boundary twin of the DB's CHECK constraint: same rule,
     # enforced earlier, as a clean 422 instead of a database error.
