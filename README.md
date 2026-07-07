@@ -13,6 +13,44 @@ A voice-first tool for adults 65+: the primary user speaks an issue, AI turns it
 - **Email:** Resend via `resend`
 - **Deploy target:** Render
 
+## Local development
+
+Prerequisites: Python 3.11+, Node 18+, and Postgres running locally.
+
+### Backend
+
+```bash
+cd server
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+cp .env.example .env             # then fill in DATABASE_URL and JWT_SECRET
+createdb care_infrastructure     # or create the database named in your DATABASE_URL
+
+uvicorn main:app --reload --port 8000
+```
+
+Tables are created automatically on startup — no migration step. The API is at `http://localhost:8000/api`.
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL it prints (`http://localhost:5173`). The dev server proxies every `/api` request to `localhost:8000`, so the browser talks to a single origin and no CORS setup is needed — but it also means the backend must be running for the app to work.
+
+## Python differences to consider
+
+**1. Pydantic schemas are a required extra layer.** In Express we wrote `if (!username) return res.status(400)` by hand in each controller. In FastAPI, you declare a Pydantic model for the request body and the framework validates it before your handler runs. Same idea for response bodies — declare the shape, FastAPI serializes it. This is the `server/schemas/` folder.
+
+**2. `Depends()` replaces `app.use(middleware)` for per-route concerns.** The old `checkAuthentication` middleware becomes a function like `get_current_user`, and any route that needs auth pulls it in with `user = Depends(get_current_user)`. Cleaner than global middleware because it's obvious from the route signature which endpoints require auth and which don't. This is the `server/dependencies/` folder.
+
+**3. snake_case in Python, camelCase in the API contract.** The DB and Python code use `full_name`, `has_completed_setup`. The JSON payloads use `fullName`, `hasCompletedSetup`. Pydantic handles the translation at the boundary with `alias_generator=to_camel` — you write one line of config on your schema and never touch it again.
+
 ## Team workflow
 
 Branches: `pre-prod` is the integration branch — all feature PRs target it. `main` is the stable branch — it only receives promotion PRs from `pre-prod` and is what Render deploys.
@@ -25,14 +63,6 @@ Branches: `pre-prod` is the integration branch — all feature PRs target it. `m
 6. Reviewer approves → author merges (merge commit) and deletes the branch; ticket to **Done**.
 7. Promotion: when `pre-prod` is stable (at minimum before each deploy milestone), open a PR from `pre-prod` → `main`. `main` must always run; every merge to `main` auto-deploys to Render — check the deploy after merging.
 8. No direct pushes to `main` or `pre-prod` — branch protection blocks them, including for admins.
-
-## Python differences to consider
-
-**1. Pydantic schemas are a required extra layer.** In Express we wrote `if (!username) return res.status(400)` by hand in each controller. In FastAPI, you declare a Pydantic model for the request body and the framework validates it before your handler runs. Same idea for response bodies — declare the shape, FastAPI serializes it. This is the `server/schemas/` folder.
-
-**2. `Depends()` replaces `app.use(middleware)` for per-route concerns.** The old `checkAuthentication` middleware becomes a function like `get_current_user`, and any route that needs auth pulls it in with `user = Depends(get_current_user)`. Cleaner than global middleware because it's obvious from the route signature which endpoints require auth and which don't. This is the `server/dependencies/` folder.
-
-**3. snake_case in Python, camelCase in the API contract.** The DB and Python code use `full_name`, `has_completed_setup`. The JSON payloads use `fullName`, `hasCompletedSetup`. Pydantic handles the translation at the boundary with `alias_generator=to_camel` — you write one line of config on your schema and never touch it again.
 
 ## File structure
 
