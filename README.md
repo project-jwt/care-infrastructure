@@ -13,6 +13,36 @@ A voice-first tool for adults 65+: the primary user speaks an issue, AI turns it
 - **Email:** Resend via `resend`
 - **Deploy target:** Render
 
+## Local development
+
+Prerequisites: Python 3.11+, Node 18+, and Postgres running locally.
+
+### Backend
+
+```bash
+cd server
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+cp .env.example .env             # then fill in DATABASE_URL and JWT_SECRET
+createdb care_infrastructure     # or create the database named in your DATABASE_URL
+
+uvicorn main:app --reload --port 8000
+```
+
+Tables are created automatically on startup — no migration step. The API is at `http://localhost:8000/api`.
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL it prints (`http://localhost:5173`). The dev server proxies every `/api` request to `localhost:8000`, so the browser talks to a single origin and no CORS setup is needed — but it also means the backend must be running for the app to work.
+
 ## Python differences to consider
 
 **1. Pydantic schemas are a required extra layer.** In Express we wrote `if (!username) return res.status(400)` by hand in each controller. In FastAPI, you declare a Pydantic model for the request body and the framework validates it before your handler runs. Same idea for response bodies — declare the shape, FastAPI serializes it. This is the `server/schemas/` folder.
