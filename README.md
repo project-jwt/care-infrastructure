@@ -51,6 +51,19 @@ Open the Vite URL it prints (`http://localhost:5173`). The dev server proxies ev
 
 **3. snake_case in Python, camelCase in the API contract.** The DB and Python code use `full_name`, `has_completed_setup`. The JSON payloads use `fullName`, `hasCompletedSetup`. Pydantic handles the translation at the boundary with `alias_generator=to_camel` — you write one line of config on your schema and never touch it again.
 
+## Team workflow
+
+Branches: `pre-prod` is the integration branch — all feature PRs target it. `main` is the stable branch — it only receives promotion PRs from `pre-prod` and is what Render deploys.
+
+1. Move your assigned ticket to **In Progress** on the board.
+2. Branch from fresh `pre-prod`: `git checkout pre-prod && git pull && git checkout -b your-name/feature-name`.
+3. Use [Conventional Commits](https://www.conventionalcommits.org): `feat: …`, `fix: …`, `docs: …`, `chore: …` — with an optional scope like `feat(server): …`.
+4. Open the PR early **to `pre-prod`** (draft is fine), fill out the template, move the ticket to **In Review**.
+5. Tag one teammate for review. Reviews are substantive: ask about unclear code, flag potential breaks, suggest improvements. Reviews are due within 24 hours — anything older gets raised in the daily stand-down.
+6. Reviewer approves → author merges (merge commit) and deletes the branch; ticket to **Done**.
+7. Promotion: when `pre-prod` is stable (at minimum before each deploy milestone), open a PR from `pre-prod` → `main`. `main` must always run; every merge to `main` auto-deploys to Render — check the deploy after merging.
+8. No direct pushes to `main` or `pre-prod` — branch protection blocks them, including for admins.
+
 ## File structure
 
 ```
