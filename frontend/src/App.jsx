@@ -14,6 +14,8 @@ import { getMe } from './adapters/users-adapters';
 import LoginRegisterPage from './components/LoginRegisterPage';
 import BottomNav from './components/BottomNav';
 import PrimaryHome from './components/PrimaryHome';
+import RecordingPage from './components/RecordingPage';
+import SummaryReview from './components/SummaryReview';
 import ContactDashboard from './components/ContactDashboard';
 import PastSummaries from './components/PastSummaries';
 import TrustedContactsList from './components/TrustedContactsList';
@@ -32,6 +34,8 @@ export default function App() {
   const [user, setUser] = useState(null); // null = logged out
   const [checking, setChecking] = useState(true); // true while validating a stored token
   const [view, setView] = useState('home');
+  // Carried from the recording step to the review step (speak → review flow).
+  const [transcript, setTranscript] = useState('');
 
   // On first load: if a token survived a refresh, ask the backend who it
   // belongs to. Only an explicit rejection (401/403 = expired, forged, user
@@ -73,6 +77,28 @@ export default function App() {
   const isPrimary = user.role === 'primary';
   const CurrentView = VIEWS[view] ?? PrimaryHome;
 
+  // The speak → review flow hands the transcript between steps, which the
+  // uniform VIEWS map (user/onNavigate only) can't express — so those two
+  // screens render explicitly instead of living in the map.
+  let primaryScreen;
+  if (view === 'recording') {
+    primaryScreen = (
+      <RecordingPage
+        onBack={() => setView('home')}
+        onContinue={(nextTranscript) => {
+          setTranscript(nextTranscript);
+          setView('review');
+        }}
+      />
+    );
+  } else if (view === 'review') {
+    // SummaryReview is still a stub; the transcript prop is ready for the
+    // ticket that builds it.
+    primaryScreen = <SummaryReview user={user} transcript={transcript} onNavigate={setView} />;
+  } else {
+    primaryScreen = <CurrentView user={user} onNavigate={setView} />;
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -82,7 +108,7 @@ export default function App() {
 
       <div className="app-content">
         {/* Contacts get one read-only screen; primaries get the view switcher. */}
-        {isPrimary ? <CurrentView user={user} onNavigate={setView} /> : <ContactDashboard user={user} />}
+        {isPrimary ? primaryScreen : <ContactDashboard user={user} />}
       </div>
 
       {isPrimary && <BottomNav active={view} onNavigate={setView} />}
