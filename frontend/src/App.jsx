@@ -34,8 +34,9 @@ export default function App() {
   const [view, setView] = useState('home');
 
   // On first load: if a token survived a refresh, ask the backend who it
-  // belongs to. A dead token (expired, forged, user deleted) gets cleared
-  // by logout() so we land on the login page instead of looping.
+  // belongs to. Only an explicit rejection (401/403 = expired, forged, user
+  // deleted) clears the token — a network blip or server error keeps it, so
+  // a valid session isn't lost to a temporary outage.
   useEffect(() => {
     const restoreSession = async () => {
       if (!getToken()) {
@@ -43,8 +44,11 @@ export default function App() {
         return;
       }
       const { data, error } = await getMe();
-      if (error) logout();
-      else setUser(data);
+      if (error) {
+        if (error.status === 401 || error.status === 403) logout();
+      } else {
+        setUser(data);
+      }
       setChecking(false);
     };
     restoreSession();

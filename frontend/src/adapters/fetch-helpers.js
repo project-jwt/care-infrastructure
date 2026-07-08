@@ -26,9 +26,16 @@ export const handleFetch = async (url, options = {}) => {
   try {
     const response = await fetch(url, { ...options, headers });
 
-    // 204s and empty bodies have nothing to parse.
-    const text = await response.text();
-    const body = text ? JSON.parse(text) : null;
+    // Parse separately from the fetch: a non-JSON body (e.g. a plain-text
+    // 500 from a proxy) must not be mistaken for a network failure — the
+    // real HTTP status is preserved either way. Empty bodies parse to null.
+    let body = null;
+    try {
+      const text = await response.text();
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = null;
+    }
 
     if (!response.ok) {
       // server/main.py shapes every error as { message }.

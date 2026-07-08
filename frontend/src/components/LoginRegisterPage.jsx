@@ -93,7 +93,9 @@ export default function LoginRegisterPage({ onAuth }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            minLength={8}
+            // 8-char minimum is a rule for NEW passwords — don't block
+            // existing accounts from logging in with a shorter one.
+            minLength={mode === 'register' ? 8 : undefined}
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
           />
         </label>
