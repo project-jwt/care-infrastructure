@@ -9,6 +9,8 @@ body {
   margin: 0;
   font-family: system-ui, sans-serif;
   font-size: 18px; /* larger base size for older adults */
+  background: #fff;
+  color: #111; /* explicit colors — OS dark mode otherwise makes text unreadable */
 }
 
 button {
