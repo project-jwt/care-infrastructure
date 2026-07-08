@@ -31,7 +31,7 @@ createdb care_infrastructure     # or create the database named in your DATABASE
 uvicorn main:app --reload --port 8000
 ```
 
-Tables are created automatically on startup — no migration step. The API is at `http://localhost:8000/api`.
+Tables are created automatically on startup — no migration step. The API is at `http://127.0.0.1:8000/api`.
 
 ### Frontend
 
@@ -41,7 +41,7 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL it prints (`http://localhost:5173`). The dev server proxies every `/api` request to `localhost:8000`, so the browser talks to a single origin and no CORS setup is needed — but it also means the backend must be running for the app to work.
+Open the Vite URL it prints (`http://localhost:5173`). The dev server proxies every `/api` request to `127.0.0.1:8000`, so the browser talks to a single origin and no CORS setup is needed — but it also means the backend must be running for the app to work.
 
 ## Python differences to consider
 
@@ -114,7 +114,7 @@ care-infrastructure/
 │
 └── frontend/                             # React + Vite app
     ├── package.json                      # dev/build/preview scripts + React/Vite deps
-    ├── vite.config.js                    # proxies /api → http://localhost:8000
+    ├── vite.config.js                    # proxies /api → http://127.0.0.1:8000
     ├── index.html                        # Vite entry HTML
     │
     └── src/
