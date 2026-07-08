@@ -8,7 +8,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: `http://localhost:${SERVER_PORT}`,
+        // 127.0.0.1, not localhost: Node resolves localhost to IPv6 (::1)
+        // but uvicorn binds IPv4 only, so the proxy would get refused.
+        target: `http://127.0.0.1:${SERVER_PORT}`,
         changeOrigin: true,
       },
     },
