@@ -1,11 +1,10 @@
 # schemas/summary.py — request/response shapes for §Summaries (Primary only)
 #
-# TODO (built with the save/send endpoints, not the AI draft step):
-#   - SummaryCreate   ( transcript?, summaryText )
-#   - SummaryOut      ( id, transcript?, summaryText, createdAt, updatedAt )
-#   - SummaryUpdate   ( summaryText )
+# TODO (built with the send feature, needs trusted contacts first):
 #   - SendIn          ( contactIds: list[int] )
 #   - SendOut         ( summaryId, sentTo: [ { contactId, sentAt } ] )
+
+from datetime import datetime
 
 from pydantic import Field
 
@@ -40,3 +39,40 @@ class DraftOut(CamelModel):
     needs_clarification: bool
     questions: list[str] = []        # only populated when clarification is needed
     summary_text: str | None = None  # only populated when the summary is ready
+
+
+class SummaryCreate(CamelModel):
+    """POST /api/summaries body: { transcript?, summaryText }
+    transcript is optional (spec) — the frontend may discard the raw speech."""
+
+    transcript: str | None = None
+    summary_text: str = Field(min_length=1)
+
+
+class SummaryUpdate(CamelModel):
+    """PATCH /api/summaries/:id body: { summaryText } — required, the only
+    editable field."""
+
+    summary_text: str = Field(min_length=1)
+
+
+class SummaryOut(CamelModel):
+    """Detail response (POST /summaries, GET/PATCH /summaries/:id):
+    { id, transcript, summaryText, createdAt, updatedAt }"""
+
+    id: int
+    transcript: str | None
+    summary_text: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SummaryListOut(CamelModel):
+    """List-item response for GET /api/summaries — the spec's list shape has
+    NO transcript: { id, summaryText, createdAt, updatedAt }. Same allowlist
+    trick as UserOut dropping password_hash: no field, can't appear."""
+
+    id: int
+    summary_text: str
+    created_at: datetime
+    updated_at: datetime

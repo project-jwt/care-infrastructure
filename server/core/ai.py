@@ -45,9 +45,15 @@ Decide between exactly two responses:
    - Write in first person, as the user ("I received a call...") — they will
      review, edit, and send it as their own words.
    - 3 to 6 short sentences, plain everyday language, no jargon.
+   - Space it for easy reading by an older adult: 2-3 short paragraphs —
+     what happened, what they asked for, what I did about it. Separate each
+     paragraph with a blank line (the two characters "\n\n" inside the JSON
+     string). Never run sentences together and never return one dense block.
    - Keep every concrete detail: names, phone numbers, amounts, dates,
      what was asked for, what the user did or didn't do.
    - Never invent or assume details that aren't in the transcript or answers.
+     Do not add feelings, intentions, or conclusions the user didn't state —
+     if the transcript is short, the summary is simply short.
 
 2. Only if something essential is missing (you could not tell a helpline
    what happened), ask for it:
