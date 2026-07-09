@@ -1,8 +1,5 @@
-# models/summary_model.py — the summaries table (spec §Schema Design) + helpers
-#
-# TODO (built with the send feature): summary_recipients table and its helpers
-#   - record_send(session, summary_id, contact_ids)
-#   - list_received_for_contact(session, contact_id)
+# models/summary_model.py — the summaries + summary_recipients tables
+# (spec §Schema Design) + helpers.
 
 from datetime import datetime
 
@@ -11,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
+from models.user_model import User
 
 
 class Summary(Base):
@@ -40,6 +38,33 @@ class Summary(Base):
     # of every UPDATE touching this row — PATCH bumps it with no router code.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SummaryRecipient(Base):
+    """One 'summary X was sent to contact Y' record (spec: summary_recipients).
+
+    Written by the send feature when an email goes out; read by the contact's
+    dashboard. A summary can be sent to many contacts, and a contact can
+    receive many summaries — this table is the join between them.
+    """
+
+    __tablename__ = "summary_recipients"
+
+    # Python attribute `id`, DB column `recipient_id` — same trick as above.
+    id: Mapped[int] = mapped_column("recipient_id", primary_key=True)
+
+    # CASCADE on both ends: deleting the summary (or either account) also
+    # removes the delivery records that point at it.
+    summary_id: Mapped[int] = mapped_column(
+        ForeignKey("summaries.summary_id", ondelete="CASCADE")
+    )
+    contact_id: Mapped[int] = mapped_column(
+        ForeignKey("users.user_id", ondelete="CASCADE")
+    )
+
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 
@@ -103,3 +128,44 @@ async def delete(session: AsyncSession, summary_id: int, user_id: int) -> bool:
     await session.delete(summary)  # queued in the session's deleted bucket
     await session.commit()         # DELETE FROM summaries WHERE ... runs here
     return True
+
+
+async def record_send(
+    session: AsyncSession, summary_id: int, contact_ids: list[int]
+) -> list[SummaryRecipient]:
+    """Record that a summary went out to these contacts (POST /:id/send).
+
+    One row per recipient, all in one commit — the send endpoint validates
+    the contact ids BEFORE calling this (via contact_model.is_contact_of),
+    so a failed send records nothing.
+    """
+    rows = [
+        SummaryRecipient(summary_id=summary_id, contact_id=contact_id)
+        for contact_id in contact_ids
+    ]
+    session.add_all(rows)
+    await session.commit()
+    for row in rows:
+        await session.refresh(row)  # pull back recipient_id + DB-side sent_at
+    return rows
+
+
+async def list_received_for_contact(
+    session: AsyncSession, contact_id: int
+) -> list[tuple[Summary, datetime, User]]:
+    """Everything shared WITH a contact, newest send first (GET
+    /api/received-summaries). Returns (summary, sent_at, sender) triples —
+    the router shapes them into { summaryId, summaryText, sentAt, from }.
+
+    Two joins: recipients -> summaries (what was sent) and summaries ->
+    users (who sent it). Scoped by contact_id the same way the owner-scoped
+    helpers above are: a contact only ever sees rows addressed to them.
+    """
+    result = await session.execute(
+        select(Summary, SummaryRecipient.sent_at, User)
+        .join(SummaryRecipient, SummaryRecipient.summary_id == Summary.id)
+        .join(User, User.id == Summary.user_id)
+        .where(SummaryRecipient.contact_id == contact_id)
+        .order_by(SummaryRecipient.sent_at.desc())
+    )
+    return [(summary, sent_at, sender) for summary, sent_at, sender in result.all()]
