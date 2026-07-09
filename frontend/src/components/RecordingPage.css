@@ -1,0 +1,148 @@
+/* RecordingPage styles — kept in its own file (not App.css) so this ticket
+   doesn't collide with F1's global styles.
+   Design rules applied: one primary action, 48px+ touch targets, large
+   readable text, high contrast, visible focus states. Mobile-first. */
+
+.recording-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+  text-align: center;
+}
+
+.recording-page__back {
+  align-self: flex-start;
+  min-height: 48px; /* accessibility: minimum touch target */
+  padding: 0.5rem 1rem;
+  font-size: 1.125rem;
+  background: none;
+  border: none;
+  color: #1a5276;
+  cursor: pointer;
+}
+
+.recording-page__heading {
+  font-size: 1.75rem;
+  margin: 0;
+  color: #1c2833;
+}
+
+/* The AI's clarifying question — the thing to read before answering. */
+.recording-page__question {
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+  color: #1c2833;
+}
+
+.recording-page__hint,
+.recording-page__fallback-notice {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #2e4053;
+}
+
+/* The Speak button — the screen's one primary action, oversized on purpose. */
+.recording-page__speak {
+  width: 8rem;
+  height: 8rem;
+  border-radius: 50%;
+  border: 3px solid #1a5276;
+  background: #eaf2f8;
+  color: #1a5276;
+  font-size: 1.375rem;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  cursor: pointer;
+}
+
+.recording-page__speak-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+/* Listening state: switches to red and pulses so it's obvious the mic is on. */
+.recording-page__speak--listening {
+  border-color: #922b21;
+  background: #fdedec;
+  color: #922b21;
+  animation: recording-page-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes recording-page-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(146, 43, 33, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(146, 43, 33, 0);
+  }
+}
+
+/* Reserve a line so the layout doesn't jump when a status appears. */
+.recording-page__status {
+  min-height: 1.5rem;
+  margin: 0;
+  font-size: 1.125rem;
+  color: #6e2c00;
+}
+
+.recording-page__label {
+  align-self: flex-start;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1c2833;
+}
+
+.recording-page__transcript {
+  width: 100%;
+  font-size: 1.25rem; /* large type for readability */
+  line-height: 1.5;
+  padding: 0.75rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  resize: vertical;
+  font-family: inherit;
+  color: #1c2833;
+}
+
+/* Slight grey while read-only (during recording) to hint "not editable yet". */
+.recording-page__transcript:read-only {
+  background: #f8f9f9;
+}
+
+.recording-page__continue {
+  width: 100%;
+  min-height: 56px; /* comfortably above the 48px minimum */
+  font-size: 1.375rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  background: #1a5276;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.recording-page__continue:disabled {
+  background: #aeb6bf;
+  cursor: not-allowed;
+}
+
+/* Clear keyboard-focus indicator on every interactive element. */
+.recording-page__back:focus-visible,
+.recording-page__speak:focus-visible,
+.recording-page__transcript:focus-visible,
+.recording-page__continue:focus-visible {
+  outline: 3px solid #1a5276;
+  outline-offset: 3px;
+}
