@@ -34,8 +34,10 @@ export default function App() {
   const [user, setUser] = useState(null); // null = logged out
   const [checking, setChecking] = useState(true); // true while validating a stored token
   const [view, setView] = useState('home');
-  // Carried from the recording step to the review step (speak → review flow).
+  // Carried from the recording step to the review step (speak → review flow):
+  // the raw transcript and the AI-drafted summary the user will edit/approve.
   const [transcript, setTranscript] = useState('');
+  const [summaryText, setSummaryText] = useState('');
 
   // On first load: if a token survived a refresh, ask the backend who it
   // belongs to. Only an explicit rejection (401/403 = expired, forged, user
@@ -85,16 +87,24 @@ export default function App() {
     primaryScreen = (
       <RecordingPage
         onBack={() => setView('home')}
-        onContinue={(nextTranscript) => {
+        onContinue={({ transcript: nextTranscript, summaryText: nextSummary }) => {
           setTranscript(nextTranscript);
+          setSummaryText(nextSummary);
           setView('review');
         }}
       />
     );
   } else if (view === 'review') {
-    // SummaryReview is still a stub; the transcript prop is ready for the
-    // ticket that builds it.
-    primaryScreen = <SummaryReview user={user} transcript={transcript} onNavigate={setView} />;
+    // SummaryReview is still a stub; the transcript and AI-drafted summary
+    // props are ready for the ticket that builds it.
+    primaryScreen = (
+      <SummaryReview
+        user={user}
+        transcript={transcript}
+        summaryText={summaryText}
+        onNavigate={setView}
+      />
+    );
   } else {
     primaryScreen = <CurrentView user={user} onNavigate={setView} />;
   }
