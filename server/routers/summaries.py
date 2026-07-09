@@ -46,6 +46,9 @@ async def draft(body: DraftIn, user: User = Depends(require_primary)):
     except Exception:
         # Gemini outage/quota/network — not the client's fault, and the raw
         # error may mention internals, so log it and send a generic 502.
+        # TODO(post-MVP, review #6): catch only the genai SDK's exception
+        # types here and let genuine bugs 500 through main.py's handlers,
+        # instead of flattening everything into the same 502.
         logger.exception("draft_summary failed")
         raise HTTPException(status_code=502, detail="Could not generate a summary right now — please try again")
 

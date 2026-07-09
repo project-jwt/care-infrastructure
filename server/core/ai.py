@@ -47,7 +47,7 @@ Decide between exactly two responses:
    - 3 to 6 short sentences, plain everyday language, no jargon.
    - Space it for easy reading by an older adult: 2-3 short paragraphs —
      what happened, what they asked for, what I did about it. Separate each
-     paragraph with a blank line (the two characters "\n\n" inside the JSON
+     paragraph with a blank line (the two characters "\\n\\n" inside the JSON
      string). Never run sentences together and never return one dense block.
    - Keep every concrete detail: names, phone numbers, amounts, dates,
      what was asked for, what the user did or didn't do.
@@ -87,9 +87,14 @@ async def draft_summary(transcript: str, answers: list[ClarifyingAnswer]) -> Dra
         ),
     )
 
-    # Guaranteed-shape JSON in, our API shape out ("" -> None for summaryText).
+    # Guaranteed-shape JSON in, our API shape out.
     draft = DraftOut.model_validate_json(response.text)
     if not draft.needs_clarification and not draft.summary_text:
         # Belt-and-suspenders: a summary round must actually contain one.
         raise ValueError("Gemini returned neither questions nor a summary")
+    if not draft.summary_text:
+        # Gemini's schema requires all keys, so clarification rounds carry
+        # summaryText: "" — normalize to null so clients can just check
+        # `summaryText !== null` without also knowing about "".
+        draft.summary_text = None
     return draft
