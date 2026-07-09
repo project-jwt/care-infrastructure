@@ -16,7 +16,7 @@ from db.engine import engine
 # models/__init__.py imports each model module, so new models added there
 # are picked up by create_all with no change to this file.
 import models  # noqa: F401
-from routers import auth, users
+from routers import auth, summaries, users
 
 
 @asynccontextmanager
@@ -35,6 +35,7 @@ app = FastAPI(title="Care Infrastructure API", lifespan=lifespan)
 # Mount each resource's router under /api (like app.use('/api', router)).
 # Final paths: /api/auth/register, /api/users/me, ...
 app.include_router(auth.router, prefix="/api")
+app.include_router(summaries.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 
 
