@@ -154,6 +154,13 @@ async def record_send(
       - it MUST validate every contact id via contact_model.is_contact_of
         (B2) before any email goes out, so a failed send records nothing.
     """
+    # Empty list = no-op (return early). Without this, insert().values([])
+    # compiles to "INSERT ... DEFAULT VALUES" — a phantom row that violates
+    # the NOT NULL FKs. B5's SendIn min_length=1 guards the endpoint, but the
+    # helper stays safe to call with [] on its own.
+    if not contact_ids:
+        return []
+
     # One INSERT..RETURNING for the whole batch: recipient_id and the DB-side
     # sent_at come back with the insert itself (a refresh per row would be
     # N+1 extra SELECTs).
