@@ -59,8 +59,12 @@ class SummaryRecipient(Base):
     summary_id: Mapped[int] = mapped_column(
         ForeignKey("summaries.summary_id", ondelete="CASCADE")
     )
+    # index=True: Postgres doesn't auto-index FK columns, and the inbox query
+    # filters on contact_id every time. (create_all only creates MISSING
+    # tables — a local DB that already has this one needs it recreated, or
+    # CREATE INDEX by hand, to pick the index up.)
     contact_id: Mapped[int] = mapped_column(
-        ForeignKey("users.user_id", ondelete="CASCADE")
+        ForeignKey("users.user_id", ondelete="CASCADE"), index=True
     )
 
     sent_at: Mapped[datetime] = mapped_column(
@@ -135,13 +139,22 @@ async def record_send(
 ) -> list[SummaryRecipient]:
     """Record that a summary went out to these contacts (POST /:id/send).
 
-    One row per recipient, all in one commit — the send endpoint validates
-    the contact ids BEFORE calling this (via contact_model.is_contact_of),
-    so a failed send records nothing.
+    One row per recipient, all in one commit. contact_ids are deduped here —
+    [3, 3] records (and should email) contact 3 once; there's no UNIQUE on
+    (summary_id, contact_id) because separate sends of the same summary are
+    legitimate re-sends.
+
+    This helper checks neither ownership nor trust, so two obligations on
+    the endpoint calling it:
+      - it MUST resolve the summary through the owner-scoped find_by_id
+        first (spec: 404) — otherwise a caller could record sends of
+        someone else's summary;
+      - it MUST validate every contact id via contact_model.is_contact_of
+        (B2) before any email goes out, so a failed send records nothing.
     """
     rows = [
         SummaryRecipient(summary_id=summary_id, contact_id=contact_id)
-        for contact_id in contact_ids
+        for contact_id in dict.fromkeys(contact_ids)  # dedupe, keep order
     ]
     session.add_all(rows)
     await session.commit()
@@ -166,6 +179,9 @@ async def list_received_for_contact(
         .join(SummaryRecipient, SummaryRecipient.summary_id == Summary.id)
         .join(User, User.id == Summary.user_id)
         .where(SummaryRecipient.contact_id == contact_id)
-        .order_by(SummaryRecipient.sent_at.desc())
+        # Postgres now() is transaction-stable: one record_send batch shares
+        # a single sent_at, so id breaks the tie and keeps the order stable
+        # between refreshes.
+        .order_by(SummaryRecipient.sent_at.desc(), SummaryRecipient.id.desc())
     )
     return [(summary, sent_at, sender) for summary, sent_at, sender in result.all()]
