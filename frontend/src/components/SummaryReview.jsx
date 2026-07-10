@@ -28,7 +28,7 @@ export default function SummaryReview({ transcript, summaryText, onNavigate }) {
 
   const canSave = !isSaving && text.trim().length > 0;
 
-  async function handleSave() {
+  const handleSave = async () => {
     setIsSaving(true);
     setSaveError(null);
     const { error } = await saveSummary({
@@ -42,7 +42,7 @@ export default function SummaryReview({ transcript, summaryText, onNavigate }) {
       return;
     }
     setSaved(true);
-  }
+  };
 
   // After a successful save the form is gone — one clear next step, no way
   // to double-save the same summary.

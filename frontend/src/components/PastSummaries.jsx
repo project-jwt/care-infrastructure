@@ -20,13 +20,12 @@ import {
 import './PastSummaries.css';
 
 // "2026-07-09T23:09:50Z" -> "July 9, 2026" — plain dates, no timestamps.
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString(undefined, {
+const formatDate = (iso) =>
+  new Date(iso).toLocaleDateString(undefined, {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   });
-}
 
 export default function PastSummaries() {
   const [items, setItems] = useState(null); // null = still loading
@@ -48,7 +47,7 @@ export default function PastSummaries() {
     load();
   }, []);
 
-  async function openDetail(id) {
+  const openDetail = async (id) => {
     setActionError(null);
     setIsBusy(true);
     // The list shape has no transcript (kept light on purpose) — the detail
@@ -61,9 +60,9 @@ export default function PastSummaries() {
     }
     setSelected(data);
     setMode('detail');
-  }
+  };
 
-  async function handleSaveEdit() {
+  const handleSaveEdit = async () => {
     setIsBusy(true);
     setActionError(null);
     const { data, error } = await updateSummary(selected.id, editText.trim());
@@ -76,9 +75,9 @@ export default function PastSummaries() {
     // Keep the list in sync without refetching.
     setItems((list) => list.map((s) => (s.id === data.id ? { ...s, ...data } : s)));
     setMode('detail');
-  }
+  };
 
-  async function handleDelete() {
+  const handleDelete = async () => {
     setIsBusy(true);
     setActionError(null);
     const { error } = await deleteSummary(selected.id);
@@ -91,13 +90,13 @@ export default function PastSummaries() {
     setItems((list) => list.filter((s) => s.id !== selected.id));
     setSelected(null);
     setMode('list');
-  }
+  };
 
-  function backToList() {
+  const backToList = () => {
     setSelected(null);
     setActionError(null);
     setMode('list');
-  }
+  };
 
   // ── list mode (also loading / error / empty) ──────────────────────────────
 
