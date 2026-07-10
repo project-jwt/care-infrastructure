@@ -80,8 +80,10 @@ async def create(
         relationship=relationship,
     )
     session.add(link)
+    # No refresh needed: the INSERT's RETURNING already populated link.id at
+    # flush, and this table has no other server-generated columns (unlike
+    # summaries' onupdate timestamp).
     await session.commit()
-    await session.refresh(link)  # pull back the generated link_id
     return link
 
 
@@ -103,15 +105,19 @@ async def update(
 ) -> tuple[TrustedContactLink, User] | None:
     """Edit nickname/relationship (PATCH /api/contacts/:linkId). Only the
     fields passed get set — the router sends exclude_unset fields, so a PATCH
-    that omits nickname leaves it alone rather than nulling it."""
+    that omits nickname leaves it alone rather than nulling it.
+
+    Known narrow race (noted, not handled): a concurrent DELETE landing
+    between our SELECT and this UPDATE makes SQLAlchemy raise StaleDataError
+    (a 500) — the loser of that race was getting an error either way."""
     row = await find_by_link_id(session, link_id, owner_id)  # scoped lookup
     if row is None:
         return None
     link, contact_user = row
     for name, value in fields.items():
         setattr(link, name, value)
+    # No refresh: no server-generated columns to re-fetch on this table.
     await session.commit()
-    await session.refresh(link)
     return link, contact_user
 
 
