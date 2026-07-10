@@ -81,6 +81,26 @@ async def find_by_email(session: AsyncSession, email: str) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def find_by_email_ci(session: AsyncSession, email: str) -> User | None:
+    """Case-INSENSITIVE email lookup — for adding a trusted contact.
+
+    The primary typing their contact's email can't know how the contact
+    happened to capitalize it at registration (EmailStr only lowercases the
+    domain), so Alice@example.com must match a typed alice@example.com or
+    legitimate contacts become un-addable. Login stays exact-match via
+    find_by_email above on purpose — normalizing emails everywhere
+    (register/login) is a separate, bigger decision.
+
+    scalars().first() rather than scalar_one_or_none(): registration's
+    duplicate check is exact-match, so two accounts differing only in case
+    can coexist; picking the first beats a 500 on that oddball state.
+    """
+    result = await session.execute(
+        select(User).where(func.lower(User.email) == email.lower())
+    )
+    return result.scalars().first()
+
+
 async def create(
     session: AsyncSession, email: str, password_hash: str, full_name: str, role: str
 ) -> User:
