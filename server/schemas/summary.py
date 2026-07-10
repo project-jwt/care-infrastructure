@@ -1,8 +1,5 @@
 # schemas/summary.py — request/response shapes for §Summaries (Primary only)
-#
-# TODO (built with the send feature, needs trusted contacts first):
-#   - SendIn          ( contactIds: list[int] )
-#   - SendOut         ( summaryId, sentTo: [ { contactId, sentAt } ] )
+# and §Contact Dashboard's received-summary items (Contact only).
 
 from datetime import datetime
 
@@ -76,3 +73,50 @@ class SummaryListOut(CamelModel):
     summary_text: str
     created_at: datetime
     updated_at: datetime
+
+
+class SendIn(CamelModel):
+    """POST /api/summaries/:id/send body: { contactIds: [1, 2] }
+    min_length=1 — sending to nobody is a validation error (422), not a
+    silent no-op."""
+
+    contact_ids: list[int] = Field(min_length=1)
+
+
+class SentTo(CamelModel):
+    """One delivery inside SendOut: { contactId, sentAt } — built from the
+    summary_recipients rows record_send returns."""
+
+    contact_id: int
+    sent_at: datetime
+
+
+class SendOut(CamelModel):
+    """POST /api/summaries/:id/send response:
+    { summaryId, sentTo: [ { contactId, sentAt } ] }"""
+
+    summary_id: int
+    sent_to: list[SentTo]
+
+
+class SummarySender(CamelModel):
+    """The `from` object on a received summary: { id, fullName } — the
+    primary user who sent it, and nothing more (no email, no role)."""
+
+    id: int
+    full_name: str
+
+
+class ReceivedSummaryOut(CamelModel):
+    """List-item response for GET /api/received-summaries:
+    { summaryId, summaryText, sentAt, from: { id, fullName } }
+
+    `from` is a Python keyword, so the field is from_ with an explicit alias
+    (to_camel would produce "from_", not "from"). CamelModel's
+    populate_by_name lets the router construct it as from_=..., and FastAPI
+    serializes by alias, so the JSON key comes out as plain "from"."""
+
+    summary_id: int
+    summary_text: str
+    sent_at: datetime
+    from_: SummarySender = Field(alias="from")
