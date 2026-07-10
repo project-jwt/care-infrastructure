@@ -1,0 +1,8 @@
+# Test-only dependencies — NOT installed on Render (prod uses requirements.txt).
+# Install locally with:  pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest
+pytest-asyncio      # async def test_ / async fixtures (asyncio_mode = auto)
+httpx               # ASGITransport drives the app in-process, no live server
+aiosqlite           # async SQLite driver for the throwaway test database
