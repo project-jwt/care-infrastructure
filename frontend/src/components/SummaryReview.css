@@ -1,0 +1,97 @@
+/* SummaryReview styles — own file, same conventions as RecordingPage.css:
+   one primary action, 48px+ touch targets, large readable text, high
+   contrast, visible focus states. Mobile-first. */
+
+.summary-review {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+  text-align: center;
+}
+
+.summary-review__back {
+  align-self: flex-start;
+  min-height: 48px; /* accessibility: minimum touch target */
+  padding: 0.5rem 1rem;
+  font-size: 1.125rem;
+  background: none;
+  border: none;
+  color: #1a5276;
+  cursor: pointer;
+}
+
+.summary-review__heading {
+  font-size: 1.75rem;
+  margin: 0;
+  color: #1c2833;
+}
+
+.summary-review__hint {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #2e4053;
+}
+
+.summary-review__label {
+  align-self: flex-start;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1c2833;
+}
+
+/* The editable summary — large type, and generous line-height so the
+   \n\n paragraph gaps read clearly as blank lines. */
+.summary-review__text {
+  width: 100%;
+  font-size: 1.25rem;
+  line-height: 1.5;
+  padding: 0.75rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  resize: vertical;
+  font-family: inherit;
+  color: #1c2833;
+}
+
+/* Slight grey while read-only (during save) to hint "not editable yet". */
+.summary-review__text:read-only {
+  background: #f8f9f9;
+}
+
+/* Reserve a line so the layout doesn't jump when a status appears. */
+.summary-review__status {
+  min-height: 1.5rem;
+  margin: 0;
+  font-size: 1.125rem;
+  color: #6e2c00;
+}
+
+.summary-review__save {
+  width: 100%;
+  min-height: 56px; /* comfortably above the 48px minimum */
+  font-size: 1.375rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  background: #1a5276;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.summary-review__save:disabled {
+  background: #aeb6bf;
+  cursor: not-allowed;
+}
+
+/* Clear keyboard-focus indicator on every interactive element. */
+.summary-review__back:focus-visible,
+.summary-review__text:focus-visible,
+.summary-review__save:focus-visible {
+  outline: 3px solid #1a5276;
+  outline-offset: 3px;
+}

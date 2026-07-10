@@ -1,5 +1,256 @@
-// TODO: list of past summaries with detail / edit / delete (spec §MVP 3).
+// PastSummaries — list of saved summaries with detail / edit / delete
+// (spec §MVP 3, wireframe screen 7).
+//
+// One component, four modes, so the flow stays a single mental thread:
+//   list           -> everything saved, newest first (GET /api/summaries)
+//   detail         -> one summary + original spoken words (GET /api/summaries/:id)
+//   edit           -> textarea over the summary text (PATCH /api/summaries/:id)
+//   confirm-delete -> Delete is TWO presses, never one (DELETE /api/summaries/:id)
+//
+// Rendered from App's VIEWS map, so props are { user, onNavigate } — neither
+// is needed here (the token scopes every request to the logged-in user).
+
+import { useEffect, useState } from 'react';
+import {
+  deleteSummary,
+  getSummary,
+  listSummaries,
+  updateSummary,
+} from '../adapters/summaries-adapters';
+import './PastSummaries.css';
+
+// "2026-07-09T23:09:50Z" -> "July 9, 2026" — plain dates, no timestamps.
+const formatDate = (iso) =>
+  new Date(iso).toLocaleDateString(undefined, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
 export default function PastSummaries() {
-  return <div>TODO: PastSummaries</div>;
+  const [items, setItems] = useState(null); // null = still loading
+  const [loadError, setLoadError] = useState(null);
+
+  // Detail state: which summary is open, and what mode the screen is in.
+  const [mode, setMode] = useState('list'); // list | detail | edit | confirm-delete
+  const [selected, setSelected] = useState(null); // full record incl. transcript
+  const [editText, setEditText] = useState('');
+  const [isBusy, setIsBusy] = useState(false); // a request is in flight
+  const [actionError, setActionError] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data, error } = await listSummaries();
+      if (error) setLoadError("We couldn't load your summaries. Please try again.");
+      else setItems(data);
+    };
+    load();
+  }, []);
+
+  const openDetail = async (id) => {
+    setActionError(null);
+    setIsBusy(true);
+    // The list shape has no transcript (kept light on purpose) — the detail
+    // endpoint returns it, so "what you said" can be shown alongside.
+    const { data, error } = await getSummary(id);
+    setIsBusy(false);
+    if (error) {
+      setActionError("We couldn't open that summary. Please try again.");
+      return;
+    }
+    setSelected(data);
+    setMode('detail');
+  };
+
+  const handleSaveEdit = async () => {
+    setIsBusy(true);
+    setActionError(null);
+    const { data, error } = await updateSummary(selected.id, editText.trim());
+    setIsBusy(false);
+    if (error) {
+      setActionError("We couldn't save your changes. Please try again.");
+      return;
+    }
+    setSelected(data);
+    // Keep the list in sync without refetching.
+    setItems((list) => list.map((s) => (s.id === data.id ? { ...s, ...data } : s)));
+    setMode('detail');
+  };
+
+  const handleDelete = async () => {
+    setIsBusy(true);
+    setActionError(null);
+    const { error } = await deleteSummary(selected.id);
+    setIsBusy(false);
+    if (error) {
+      setActionError("We couldn't delete that summary. Please try again.");
+      setMode('detail');
+      return;
+    }
+    setItems((list) => list.filter((s) => s.id !== selected.id));
+    setSelected(null);
+    setMode('list');
+  };
+
+  const backToList = () => {
+    setSelected(null);
+    setActionError(null);
+    setMode('list');
+  };
+
+  // ── list mode (also loading / error / empty) ──────────────────────────────
+
+  if (mode === 'list') {
+    return (
+      <main className="past-summaries">
+        <h1 className="past-summaries__heading">Your summaries</h1>
+
+        {items === null && !loadError && (
+          <p className="past-summaries__hint">Loading&hellip;</p>
+        )}
+        {loadError && <p className="past-summaries__error">{loadError}</p>}
+        {items !== null && items.length === 0 && (
+          <p className="past-summaries__hint">
+            Nothing here yet. When you save a summary, it will show up on this
+            page.
+          </p>
+        )}
+
+        {items !== null && items.length > 0 && (
+          <ul className="past-summaries__list">
+            {items.map((s) => (
+              <li key={s.id}>
+                {/* The whole card is the tap target — no tiny icons. */}
+                <button
+                  type="button"
+                  className="past-summaries__item"
+                  onClick={() => openDetail(s.id)}
+                  disabled={isBusy}
+                >
+                  <span className="past-summaries__item-date">{formatDate(s.createdAt)}</span>
+                  <span className="past-summaries__item-preview">
+                    {s.summaryText.split('\n')[0]}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p className="past-summaries__status" role="status" aria-live="polite">
+          {actionError || ''}
+        </p>
+      </main>
+    );
+  }
+
+  // ── edit mode ─────────────────────────────────────────────────────────────
+
+  if (mode === 'edit') {
+    return (
+      <main className="past-summaries">
+        <button type="button" className="past-summaries__back" onClick={() => setMode('detail')}>
+          &larr; Cancel
+        </button>
+        <h1 className="past-summaries__heading">Change your summary</h1>
+
+        <label className="past-summaries__label" htmlFor="edit-summary">
+          Your summary:
+        </label>
+        <textarea
+          id="edit-summary"
+          className="past-summaries__textarea"
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          readOnly={isBusy}
+          rows={10}
+        />
+
+        <p className="past-summaries__status" role="status" aria-live="polite">
+          {isBusy ? 'Saving…' : actionError || ''}
+        </p>
+
+        <button
+          type="button"
+          className="past-summaries__primary"
+          onClick={handleSaveEdit}
+          disabled={isBusy || editText.trim().length === 0}
+        >
+          {isBusy ? 'Saving…' : 'Save changes'}
+        </button>
+      </main>
+    );
+  }
+
+  // ── detail + confirm-delete modes ─────────────────────────────────────────
+
+  return (
+    <main className="past-summaries">
+      <button type="button" className="past-summaries__back" onClick={backToList}>
+        &larr; All summaries
+      </button>
+
+      <h1 className="past-summaries__heading">{formatDate(selected.createdAt)}</h1>
+
+      {/* pre-line keeps the \n\n paragraph breaks visible. */}
+      <p className="past-summaries__text">{selected.summaryText}</p>
+
+      {selected.transcript && (
+        <details className="past-summaries__transcript">
+          <summary>What you said at the time</summary>
+          <p>{selected.transcript}</p>
+        </details>
+      )}
+
+      <p className="past-summaries__status" role="status" aria-live="polite">
+        {isBusy ? 'One moment…' : actionError || ''}
+      </p>
+
+      {mode === 'confirm-delete' ? (
+        <>
+          <p className="past-summaries__confirm">
+            Delete this summary? It cannot be brought back.
+          </p>
+          <button
+            type="button"
+            className="past-summaries__danger"
+            onClick={handleDelete}
+            disabled={isBusy}
+          >
+            Yes, delete it
+          </button>
+          <button
+            type="button"
+            className="past-summaries__secondary"
+            onClick={() => setMode('detail')}
+            disabled={isBusy}
+          >
+            No, keep it
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="past-summaries__primary"
+            onClick={() => {
+              setEditText(selected.summaryText);
+              setMode('edit');
+            }}
+            disabled={isBusy}
+          >
+            Change the words
+          </button>
+          <button
+            type="button"
+            className="past-summaries__secondary"
+            onClick={() => setMode('confirm-delete')}
+            disabled={isBusy}
+          >
+            Delete this summary
+          </button>
+        </>
+      )}
+    </main>
+  );
 }

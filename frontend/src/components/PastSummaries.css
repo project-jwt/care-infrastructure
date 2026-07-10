@@ -1,0 +1,218 @@
+/* PastSummaries styles — own file, same conventions as RecordingPage.css /
+   SummaryReview.css: 48px+ touch targets, large readable text, high contrast,
+   visible focus states. Mobile-first. */
+
+.past-summaries {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+  text-align: center;
+}
+
+.past-summaries__back {
+  align-self: flex-start;
+  min-height: 48px; /* accessibility: minimum touch target */
+  padding: 0.5rem 1rem;
+  font-size: 1.125rem;
+  background: none;
+  border: none;
+  color: #1a5276;
+  cursor: pointer;
+}
+
+.past-summaries__heading {
+  font-size: 1.75rem;
+  margin: 0;
+  color: #1c2833;
+}
+
+.past-summaries__hint {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #2e4053;
+}
+
+.past-summaries__error {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #6e2c00;
+}
+
+.past-summaries__list {
+  width: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Each saved summary is one big card-button — the whole surface taps. */
+.past-summaries__item {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.past-summaries__item-date {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a5276;
+}
+
+/* First line of the summary, clipped to one line — the date + opening words
+   are enough to recognize which one this is. */
+.past-summaries__item-preview {
+  font-size: 1.25rem;
+  line-height: 1.4;
+  color: #1c2833;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Detail view: the summary text, paragraphs preserved. */
+.past-summaries__text {
+  width: 100%;
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.5;
+  color: #1c2833;
+  text-align: left;
+  white-space: pre-line; /* renders the \n\n breaks as blank lines */
+}
+
+/* The original spoken words, tucked behind a disclosure so the summary
+   stays the star. */
+.past-summaries__transcript {
+  width: 100%;
+  text-align: left;
+  font-size: 1.125rem;
+  color: #2e4053;
+}
+
+.past-summaries__transcript summary {
+  cursor: pointer;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  color: #1a5276;
+}
+
+.past-summaries__label {
+  align-self: flex-start;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1c2833;
+}
+
+.past-summaries__textarea {
+  width: 100%;
+  font-size: 1.25rem;
+  line-height: 1.5;
+  padding: 0.75rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  resize: vertical;
+  font-family: inherit;
+  color: #1c2833;
+}
+
+.past-summaries__textarea:read-only {
+  background: #f8f9f9;
+}
+
+/* Reserve a line so the layout doesn't jump when a status appears. */
+.past-summaries__status {
+  min-height: 1.5rem;
+  margin: 0;
+  font-size: 1.125rem;
+  color: #6e2c00;
+}
+
+.past-summaries__confirm {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #922b21;
+}
+
+.past-summaries__primary {
+  width: 100%;
+  min-height: 56px;
+  font-size: 1.375rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  background: #1a5276;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.past-summaries__primary:disabled {
+  background: #aeb6bf;
+  cursor: not-allowed;
+}
+
+/* Secondary actions (delete entry point, cancel) — outlined, not filled,
+   so the primary action stays visually dominant. */
+.past-summaries__secondary {
+  width: 100%;
+  min-height: 56px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: #1c2833;
+  cursor: pointer;
+}
+
+/* The actual delete — red, and only reachable through the confirm step. */
+.past-summaries__danger {
+  width: 100%;
+  min-height: 56px;
+  font-size: 1.375rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  background: #922b21;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.past-summaries__danger:disabled,
+.past-summaries__secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.past-summaries__back:focus-visible,
+.past-summaries__item:focus-visible,
+.past-summaries__textarea:focus-visible,
+.past-summaries__primary:focus-visible,
+.past-summaries__secondary:focus-visible,
+.past-summaries__danger:focus-visible,
+.past-summaries__transcript summary:focus-visible {
+  outline: 3px solid #1a5276;
+  outline-offset: 3px;
+}
