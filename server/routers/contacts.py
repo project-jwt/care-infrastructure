@@ -52,9 +52,15 @@ async def add_contact(
     404 when the email has no CONTACT account (see privacy note up top),
     409 when this contact is already on the list.
     """
-    contact_user = await user_model.find_by_email(session, body.contact_email)
+    # Case-insensitive on purpose: the primary can't know how the contact
+    # capitalized their email at registration (review: exact match made
+    # legitimately-registered contacts un-addable).
+    contact_user = await user_model.find_by_email_ci(session, body.contact_email)
     if contact_user is None or contact_user.role != "contact":
-        raise HTTPException(status_code=404, detail="No contact account with that email")
+        # Exact spec string — the frontend matches on it, and it deliberately
+        # doesn't say "contact" (the privacy note up top: never reveal whether
+        # the email exists or what role it holds).
+        raise HTTPException(status_code=404, detail="No account with that email")
 
     if await contact_model.is_contact_of(session, user.id, contact_user.id):
         raise HTTPException(status_code=409, detail="Contact already added")
@@ -66,6 +72,10 @@ async def add_contact(
     except IntegrityError:
         # Race: two simultaneous adds can both pass the check above; the
         # UNIQUE (owner_id, contact_id) catches the loser — same 409.
+        # NOTE this catch is broader than that one constraint: the two FKs
+        # land here too. Unreachable today (no user-deletion endpoint), but
+        # if accounts become deletable, a contact vanishing mid-request would
+        # read as "already added" — split the handling then.
         raise HTTPException(status_code=409, detail="Contact already added")
     return _to_out(link, contact_user)
 
