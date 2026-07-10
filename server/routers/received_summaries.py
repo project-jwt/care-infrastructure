@@ -31,10 +31,10 @@ async def list_received_summaries(
     rows = await summary_model.list_received_for_contact(session, user.id)
     return [
         ReceivedSummaryOut(
-            summary_id=summary.id,
-            summary_text=summary.summary_text,
-            sent_at=sent_at,
-            from_=SummarySender(id=sender.id, full_name=sender.full_name),
+            summary_id=row.summary_id,
+            summary_text=row.summary_text,
+            sent_at=row.sent_at,
+            from_=SummarySender(id=row.sender_id, full_name=row.sender_name),
         )
-        for summary, sent_at, sender in rows
+        for row in rows
     ]

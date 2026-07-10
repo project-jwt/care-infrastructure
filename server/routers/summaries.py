@@ -8,6 +8,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.ai import draft_summary
@@ -170,7 +171,18 @@ async def send_summary(
             detail="Could not send the summary right now — please try again",
         )
 
-    rows = await summary_model.record_send(session, summary_id, contact_ids)
+    try:
+        rows = await summary_model.record_send(session, summary_id, contact_ids)
+    except IntegrityError:
+        # Vanishingly narrow race: a contact account (or the summary) deleted
+        # between validation above and this insert trips the FK. The emails
+        # did go out; the honest answer is still "the send didn't complete" —
+        # get_db rolls the failed transaction back on close.
+        logger.exception("record_send hit an FK violation after emails were sent")
+        raise HTTPException(
+            status_code=502,
+            detail="Could not send the summary right now — please try again",
+        )
     return SendOut(
         summary_id=summary_id,
         sent_to=[SentTo(contact_id=row.contact_id, sent_at=row.sent_at) for row in rows],
