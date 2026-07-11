@@ -24,14 +24,16 @@ class Settings(BaseSettings):
     # Required — no default, so the app refuses to boot without them.
     database_url: str  # postgresql+asyncpg://... (+asyncpg picks the async driver)
     jwt_secret: str    # signs every token; leaking it = anyone can forge logins
+    resend_api_key: str  # email-send is live — a blank key would boot fine but
+                         # fail every send with a confusing 502, so require it
 
     # Optional — sensible defaults for local dev.
     jwt_algorithm: str = "HS256"       # HMAC-SHA256, the standard symmetric JWT alg
     jwt_expire_minutes: int = 60 * 24 * 7  # tokens live 7 days, then the user logs in again
 
-    # Blank until we build the AI-draft and email-send features.
+    # Blank works until the AI-draft route is called — it 502s per request
+    # without a key, which is visible enough for a dev-only feature gap.
     gemini_api_key: str = ""
-    resend_api_key: str = ""
 
 
 # Instantiated ONCE at import time — this line is what actually reads .env and

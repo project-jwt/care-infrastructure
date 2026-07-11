@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.ai import draft_summary
-from core.email import send_summary_email
+from core.email import EmailSendError, send_summary_email
 from dependencies.auth import require_primary
 from dependencies.db import get_db
 from models import contact_model, summary_model, user_model
@@ -154,17 +154,26 @@ async def send_summary(
             raise HTTPException(
                 status_code=403, detail="A contactId is not a trusted contact"
             )
-        # is_contact_of passing means the link's FK guarantees the user row.
-        recipients.append(await user_model.find(session, contact_id))
+        recipient = await user_model.find(session, contact_id)
+        if recipient is None:
+            # The trust check passed but the account vanished before this
+            # read (deleted mid-send). Same 403 as an untrusted id — to the
+            # caller the two cases are indistinguishable on purpose.
+            raise HTTPException(
+                status_code=403, detail="A contactId is not a trusted contact"
+            )
+        recipients.append(recipient)
 
     try:
         for recipient in recipients:
             await send_summary_email(
                 recipient.email, summary.summary_text, from_name=user.full_name
             )
-    except Exception:
+    except EmailSendError:
         # Resend outage/quota/network — same treatment as /draft's Gemini
         # failure: log the real error, send a generic 502, record nothing.
+        # Only the provider's failures land here; a bug of ours propagates
+        # as a 500 instead of masquerading as a Resend outage.
         logger.exception("send_summary_email failed")
         raise HTTPException(
             status_code=502,

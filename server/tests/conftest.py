@@ -13,6 +13,7 @@ import os
 # test overrides get_db onto the in-memory engine.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("RESEND_API_KEY", "test-key")  # required since email-send landed
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
