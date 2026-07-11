@@ -46,12 +46,17 @@ export default function TrustedContactsList() {
   const [nickname, setNickname] = useState('');
   const [relationship, setRelationship] = useState('');
 
+  // Named (not inline in the effect) so the load-error Try Again button can
+  // re-run it. Resetting to the loading state first makes the retry visible.
+  const load = async () => {
+    setItems(null);
+    setLoadError(null);
+    const { data, error } = await listContacts();
+    if (error) setLoadError("We couldn't load your contacts.");
+    else setItems(data);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const { data, error } = await listContacts();
-      if (error) setLoadError("We couldn't load your contacts. Please try again.");
-      else setItems(data);
-    };
     load();
   }, []);
 
@@ -96,9 +101,10 @@ export default function TrustedContactsList() {
     if (error) {
       if (error.status === 404) {
         // The deliberate "no account with that email" 404 (see the backend's
-        // privacy note) — the fix is on their side, so say so kindly.
+        // privacy note) — it also fires when they signed up with the wrong
+        // role, so the message names the account type they need (review).
         setActionError(
-          "We couldn't find that email. Ask them to sign up first — then you can add them here."
+          "We couldn't find a trusted contact account with that email. Ask them to sign up as a trusted contact first — then you can add them here."
         );
       } else if (error.status === 409) {
         setActionError('This person is already on your list.');
@@ -157,7 +163,14 @@ export default function TrustedContactsList() {
         {items === null && !loadError && (
           <p className="trusted-contacts__hint">Loading&hellip;</p>
         )}
-        {loadError && <p className="trusted-contacts__error">{loadError}</p>}
+        {loadError && (
+          <>
+            <p className="trusted-contacts__error">{loadError}</p>
+            <button type="button" className="trusted-contacts__primary" onClick={load}>
+              Try again
+            </button>
+          </>
+        )}
         {items !== null && items.length === 0 && (
           <p className="trusted-contacts__hint">
             No one here yet. Add the people you trust, and you can send them
@@ -207,13 +220,21 @@ export default function TrustedContactsList() {
   if (mode === 'add') {
     return (
       <main className="trusted-contacts">
-        <button type="button" className="trusted-contacts__back" onClick={backToList}>
+        {/* Backing out mid-request is disabled everywhere: leaving the mode
+            clears `selected`, and a failed request would then re-render a
+            mode that expects it (review: crashed during a failing delete). */}
+        <button
+          type="button"
+          className="trusted-contacts__back"
+          onClick={backToList}
+          disabled={isBusy}
+        >
           &larr; Cancel
         </button>
         <h1 className="trusted-contacts__heading">Add a contact</h1>
         <p className="trusted-contacts__hint">
-          They need their own account first. Once they have signed up, enter
-          the email they used.
+          They need their own trusted contact account first. Once they have
+          signed up, enter the email they used.
         </p>
 
         <form className="trusted-contacts__form" onSubmit={handleAdd}>
@@ -280,6 +301,7 @@ export default function TrustedContactsList() {
           type="button"
           className="trusted-contacts__back"
           onClick={() => setMode('detail')}
+          disabled={isBusy}
         >
           &larr; Cancel
         </button>
@@ -328,7 +350,12 @@ export default function TrustedContactsList() {
 
   return (
     <main className="trusted-contacts">
-      <button type="button" className="trusted-contacts__back" onClick={backToList}>
+      <button
+        type="button"
+        className="trusted-contacts__back"
+        onClick={backToList}
+        disabled={isBusy}
+      >
         &larr; All contacts
       </button>
 

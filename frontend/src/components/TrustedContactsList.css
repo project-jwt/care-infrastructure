@@ -24,6 +24,13 @@
   cursor: pointer;
 }
 
+/* Greyed out while a request is in flight — leaving the screen mid-request
+   is what crashed the failing-delete path. */
+.trusted-contacts__back:disabled {
+  color: #85929e;
+  cursor: not-allowed;
+}
+
 .trusted-contacts__heading {
   font-size: 1.75rem;
   margin: 0;
