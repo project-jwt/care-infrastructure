@@ -13,22 +13,27 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from db.base import Base
-from db.engine import engine
+from db.engine import AsyncSessionLocal, engine
+from db import seed
 
 # Importing the models package registers every table in Base.metadata —
 # models/__init__.py imports each model module, so new models added there
 # are picked up by create_all with no change to this file.
 import models  # noqa: F401
-from routers import auth, contacts, received_summaries, summaries, users
+from routers import auth, contacts, helplines, received_summaries, summaries, users
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Runs once at startup (before the first request): create any missing
     # tables. Harmless if they already exist; ALTERing changed tables is a
-    # migration-tool job (Alembic, later). Rows/seed data: db/seed.py.
+    # migration-tool job (Alembic, later).
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Reference rows (the pre-loaded helplines) — idempotent, so restarts
+    # and redeploys never duplicate anything. Data lives in db/seed.py.
+    async with AsyncSessionLocal() as session:
+        await seed.ensure_seeded(session)
     yield  # app serves requests while paused here; after = shutdown cleanup
     await engine.dispose()
 
@@ -39,6 +44,7 @@ app = FastAPI(title="Care Infrastructure API", lifespan=lifespan)
 # Final paths: /api/auth/register, /api/users/me, ...
 app.include_router(auth.router, prefix="/api")
 app.include_router(contacts.router, prefix="/api")
+app.include_router(helplines.router, prefix="/api")
 app.include_router(received_summaries.router, prefix="/api")
 app.include_router(summaries.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
