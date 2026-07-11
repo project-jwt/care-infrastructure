@@ -16,6 +16,7 @@ import BottomNav from './components/BottomNav';
 import PrimaryHome from './components/PrimaryHome';
 import RecordingPage from './components/RecordingPage';
 import SummaryReview from './components/SummaryReview';
+import ChooseAction from './components/ChooseAction';
 import ContactDashboard from './components/ContactDashboard';
 import PastSummaries from './components/PastSummaries';
 import TrustedContactsList from './components/TrustedContactsList';
@@ -38,6 +39,9 @@ export default function App() {
   // the raw transcript and the AI-drafted summary the user will edit/approve.
   const [transcript, setTranscript] = useState('');
   const [summaryText, setSummaryText] = useState('');
+  // Carried from the review step to the choose-action step: the id of the
+  // summary that was just saved (what /:id/send needs).
+  const [savedSummaryId, setSavedSummaryId] = useState(null);
 
   // On first load: if a token survived a refresh, ask the backend who it
   // belongs to. Only an explicit rejection (401/403 = expired, forged, user
@@ -79,9 +83,10 @@ export default function App() {
   const isPrimary = user.role === 'primary';
   const CurrentView = VIEWS[view] ?? PrimaryHome;
 
-  // The speak → review flow hands the transcript between steps, which the
-  // uniform VIEWS map (user/onNavigate only) can't express — so those two
-  // screens render explicitly instead of living in the map.
+  // The speak → review → choose-action flow hands per-flow state between
+  // steps (transcript, then the saved summary's id), which the uniform VIEWS
+  // map (user/onNavigate only) can't express — so those three screens render
+  // explicitly instead of living in the map.
   let primaryScreen;
   if (view === 'recording') {
     primaryScreen = (
@@ -95,16 +100,22 @@ export default function App() {
       />
     );
   } else if (view === 'review') {
-    // SummaryReview is still a stub; the transcript and AI-drafted summary
-    // props are ready for the ticket that builds it.
     primaryScreen = (
       <SummaryReview
         user={user}
         transcript={transcript}
         summaryText={summaryText}
+        onSaved={(id) => {
+          setSavedSummaryId(id);
+          setView('choose-action');
+        }}
         onNavigate={setView}
       />
     );
+  } else if (view === 'choose-action' && savedSummaryId != null) {
+    // The null guard is defensive: a refresh mid-flow resets view to 'home'
+    // anyway, and the saved summary is always waiting under History.
+    primaryScreen = <ChooseAction summaryId={savedSummaryId} onNavigate={setView} />;
   } else {
     primaryScreen = <CurrentView user={user} onNavigate={setView} />;
   }
