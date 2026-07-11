@@ -25,7 +25,7 @@ python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-cp .env.example .env             # then fill in DATABASE_URL and JWT_SECRET
+cp .env.example .env             # then fill in DATABASE_URL, JWT_SECRET, and RESEND_API_KEY
 createdb care_infrastructure     # or create the database named in your DATABASE_URL
 
 uvicorn main:app --reload --port 8000
