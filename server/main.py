@@ -4,10 +4,13 @@
 # Auto-docs while running:    http://localhost:8000/docs
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.exceptions import HTTPException, RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from db.base import Base
 from db.engine import engine
@@ -47,8 +50,12 @@ app.include_router(users.router, prefix="/api")
 # think about it. Express equivalent: the 4-arg error-handling middleware.
 
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
+# Registered on the STARLETTE base class, not fastapi.HTTPException: router-
+# level errors (unknown path -> 404, wrong method -> 405) raise the parent
+# class, which a handler on the subclass never sees — they were escaping as
+# {"detail": ...}. One registration on the parent catches both.
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     # Every raise HTTPException(status_code=..., detail=...) anywhere in the
     # app becomes: <status> { "message": <detail> }
     return JSONResponse(status_code=exc.status_code, content={"message": exc.detail})
@@ -63,3 +70,32 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         for err in exc.errors()
     )
     return JSONResponse(status_code=422, content={"message": f"Validation failed — {problems}"})
+
+
+# ── Serve the built frontend (single-service deploy) ────────────────────────
+# The deploy builds frontend/dist and this app hands it out: API under /api,
+# React app for everything else — one service, one URL, no CORS or rewrites.
+# Express equivalent: app.use(express.static('build')) + the index.html
+# catch-all. Skipped entirely when dist/ doesn't exist (local dev, where Vite
+# serves the frontend itself on :5173).
+
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST.is_dir():
+    # Hashed build assets (JS/CSS bundles) served as plain files.
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+
+    # Catch-all is registered LAST, so real routes (/api/*, /docs) win; it
+    # only sees paths nothing else claimed.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend(full_path: str):
+        # Never swallow API misses into index.html — an unknown /api path
+        # must stay a JSON 404, not a 200 with HTML.
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        # Real files at the dist root (favicon, manifest...) serve as-is.
+        candidate = FRONTEND_DIST / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        # Everything else is a UI path -> the React app decides what to show.
+        return FileResponse(FRONTEND_DIST / "index.html")
