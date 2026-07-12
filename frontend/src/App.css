@@ -156,3 +156,9 @@ input {
   font-weight: bold;
   border-top: 3px solid #1a73e8;
 }
+
+/* Frozen while a request is in flight on the current screen. */
+.bottom-nav button:disabled {
+  color: #85929e;
+  cursor: not-allowed;
+}

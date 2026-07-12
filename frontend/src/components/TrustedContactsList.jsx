@@ -24,11 +24,8 @@ import {
   listContacts,
   updateContact,
 } from '../adapters/contacts-adapters';
+import { displayName } from '../utils';
 import './TrustedContactsList.css';
-
-// What the list calls a person: their nickname if one was set, else their
-// registered full name.
-const displayName = (c) => c.nickname || c.fullName;
 
 export default function TrustedContactsList() {
   const [items, setItems] = useState(null); // null = still loading

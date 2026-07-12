@@ -14,15 +14,8 @@
 
 import { useEffect, useState } from 'react';
 import { listReceivedSummaries } from '../adapters/received-summaries-adapters';
+import { formatDate } from '../utils';
 import './ContactDashboard.css';
-
-// "2026-07-09T23:09:50Z" -> "July 9, 2026" — plain dates, no timestamps.
-const formatDate = (iso) =>
-  new Date(iso).toLocaleDateString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
 
 export default function ContactDashboard() {
   const [items, setItems] = useState(null); // null = still loading
@@ -61,7 +54,8 @@ export default function ContactDashboard() {
         </h1>
         <p className="contact-dashboard__date">{formatDate(selected.sentAt)}</p>
 
-        {/* pre-wrap keeps the summary's own line and paragraph breaks. */}
+        {/* pre-line — the same rendering History gives the sender, so both
+            sides see identical layout of identical text. */}
         <p className="contact-dashboard__text">{selected.summaryText}</p>
       </main>
     );
@@ -73,16 +67,16 @@ export default function ContactDashboard() {
     <main className="contact-dashboard">
       <h1 className="contact-dashboard__heading">Summaries sent to you</h1>
 
-      {items === null && !loadError && (
-        <p className="contact-dashboard__hint">Loading&hellip;</p>
-      )}
+      {/* Always-mounted live region for the transient states — a live region
+          that mounts already holding text is never announced, so the element
+          has to exist before the message does. */}
+      <p className="contact-dashboard__status" role="status" aria-live="polite">
+        {loadError || (items === null ? 'Loading…' : '')}
+      </p>
       {loadError && (
-        <>
-          <p className="contact-dashboard__error">{loadError}</p>
-          <button type="button" className="contact-dashboard__primary" onClick={load}>
-            Try again
-          </button>
-        </>
+        <button type="button" className="contact-dashboard__primary" onClick={load}>
+          Try again
+        </button>
       )}
       {items !== null && items.length === 0 && (
         <p className="contact-dashboard__hint">
@@ -94,7 +88,9 @@ export default function ContactDashboard() {
       {items !== null && items.length > 0 && (
         <ul className="contact-dashboard__list">
           {items.map((s) => (
-            <li key={s.summaryId}>
+            // The backend deliberately allows re-sending the same summary, so
+            // summaryId alone can repeat — the timestamp disambiguates.
+            <li key={`${s.summaryId}-${s.sentAt}`}>
               {/* The whole card is the tap target — no tiny icons. */}
               <button
                 type="button"

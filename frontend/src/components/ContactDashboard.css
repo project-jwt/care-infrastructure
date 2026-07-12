@@ -51,17 +51,26 @@
   color: #6e2c00;
 }
 
-/* The full summary, reading view — left-aligned for long text, and
-   pre-wrap keeps the sender's own line breaks. */
+/* The full summary, reading view — left-aligned for long text. Same
+   pre-line/1.5 as PastSummaries__text so sender and recipient see the
+   identical layout of identical text. */
 .contact-dashboard__text {
   width: 100%;
   margin: 0;
   font-size: 1.25rem;
-  line-height: 1.6;
+  line-height: 1.5;
   color: #1c2833;
   text-align: left;
-  white-space: pre-wrap;
+  white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+/* Reserve a line so the layout doesn't jump when a status appears. */
+.contact-dashboard__status {
+  min-height: 1.5rem;
+  margin: 0;
+  font-size: 1.125rem;
+  color: #6e2c00;
 }
 
 .contact-dashboard__list {

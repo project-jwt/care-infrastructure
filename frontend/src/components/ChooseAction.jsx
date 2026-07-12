@@ -15,17 +15,17 @@
 // Props:
 //   summaryId — the summary that was just saved (what /:id/send takes)
 //   onNavigate(view) — App's view switcher (helpline / contacts / home)
+//   onBusyChange(bool) — tells App a send is in flight so it can freeze
+//                        BottomNav (navigating away mid-request loses the
+//                        outcome and invites a re-send)
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { listContacts } from '../adapters/contacts-adapters';
 import { sendSummary } from '../adapters/summaries-adapters';
+import { displayName } from '../utils';
 import './ChooseAction.css';
 
-// What the picker calls a person: their nickname if one was set, else their
-// registered full name — same rule as TrustedContactsList.
-const displayName = (c) => c.nickname || c.fullName;
-
-export default function ChooseAction({ summaryId, onNavigate }) {
+export default function ChooseAction({ summaryId, onNavigate, onBusyChange }) {
   const [mode, setMode] = useState('choose'); // choose | pick-contacts | sent
   const [contacts, setContacts] = useState(null); // null = still loading
   const [loadError, setLoadError] = useState(null);
@@ -33,6 +33,14 @@ export default function ChooseAction({ summaryId, onNavigate }) {
   const [isBusy, setIsBusy] = useState(false); // the send request is in flight
   const [actionError, setActionError] = useState(null);
   const [sentNames, setSentNames] = useState([]); // for the confirmation
+
+  // Mirror the in-flight state up to App so BottomNav freezes too — this
+  // screen already disables its own controls mid-send for exactly this
+  // reason. The cleanup unfreezes the nav if we unmount some other way.
+  useEffect(() => {
+    onBusyChange?.(isBusy);
+    return () => onBusyChange?.(false);
+  }, [isBusy, onBusyChange]);
 
   // Named (not inline in an effect) so the load-error Try Again button can
   // re-run it. Resetting to the loading state first makes the retry visible.
@@ -76,10 +84,12 @@ export default function ChooseAction({ summaryId, onNavigate }) {
         setSelectedIds(new Set());
         loadContacts();
       } else if (error.status === 502) {
-        // The email service failed; nothing was recorded. Reassure: the
-        // summary itself is already saved.
+        // The email service failed partway: no sends were recorded, but the
+        // backend emails sequentially, so some may already have been
+        // delivered — don't promise a clean retry. The summary itself is
+        // safe either way.
         setActionError(
-          "We couldn't send the email right now. Your summary is saved — please try again in a moment."
+          'Some of the emails may have already gone out. Your summary is saved — please check with your contacts before sending again.'
         );
       } else {
         setActionError("We couldn't send your summary. Please try again.");
@@ -98,6 +108,15 @@ export default function ChooseAction({ summaryId, onNavigate }) {
   if (mode === 'choose') {
     return (
       <main className="choose-action">
+        {/* Neither action is mandatory — Home is always a way out. */}
+        <button
+          type="button"
+          className="choose-action__back"
+          onClick={() => onNavigate('home')}
+        >
+          &larr; Home
+        </button>
+
         <h1 className="choose-action__heading">Saved</h1>
         <p className="choose-action__hint">
           Your summary is safe — you can find it any time under History. What
@@ -142,6 +161,15 @@ export default function ChooseAction({ summaryId, onNavigate }) {
 
   // ── pick-contacts mode (also loading / error / empty) ────────────────────
 
+  // One always-mounted live region carries every transient message (loading,
+  // load failure, send progress, send errors). It must exist before the
+  // message does: a live region that mounts already holding text — or that
+  // unmounts and remounts around a state change — is never announced, which
+  // is how the 403 message was getting lost.
+  const statusText = isBusy
+    ? 'Sending…'
+    : actionError || loadError || (contacts === null ? 'Loading…' : '');
+
   return (
     <main className="choose-action">
       {/* Greyed out while the send is in flight — leaving a mode mid-request
@@ -157,31 +185,12 @@ export default function ChooseAction({ summaryId, onNavigate }) {
 
       <h1 className="choose-action__heading">Who should get it?</h1>
 
-      {contacts === null && !loadError && (
-        <p className="choose-action__hint">Loading&hellip;</p>
-      )}
-      {loadError && (
-        <>
-          <p className="choose-action__error">{loadError}</p>
-          <button type="button" className="choose-action__primary" onClick={loadContacts}>
-            Try again
-          </button>
-        </>
-      )}
       {contacts !== null && contacts.length === 0 && (
-        <>
-          <p className="choose-action__hint">
-            You haven&rsquo;t added any trusted contacts yet. Add the people
-            you trust, and you can send them your summaries.
-          </p>
-          <button
-            type="button"
-            className="choose-action__primary"
-            onClick={() => onNavigate('contacts')}
-          >
-            Add a contact
-          </button>
-        </>
+        <p className="choose-action__hint">
+          You haven&rsquo;t added any trusted contacts yet. Add the people
+          you trust &mdash; then you can send this summary any time from
+          History.
+        </p>
       )}
 
       {contacts !== null && contacts.length > 0 && (
@@ -213,20 +222,36 @@ export default function ChooseAction({ summaryId, onNavigate }) {
               </li>
             ))}
           </ul>
-
-          <p className="choose-action__status" role="status" aria-live="polite">
-            {isBusy ? 'Sending…' : actionError || ''}
-          </p>
-
-          <button
-            type="button"
-            className="choose-action__primary"
-            onClick={handleSend}
-            disabled={isBusy || selectedIds.size === 0}
-          >
-            {isBusy ? 'Sending…' : 'Send my summary'}
-          </button>
         </>
+      )}
+
+      <p className="choose-action__status" role="status" aria-live="polite">
+        {statusText}
+      </p>
+
+      {loadError && (
+        <button type="button" className="choose-action__primary" onClick={loadContacts}>
+          Try again
+        </button>
+      )}
+      {contacts !== null && contacts.length === 0 && (
+        <button
+          type="button"
+          className="choose-action__primary"
+          onClick={() => onNavigate('contacts')}
+        >
+          Add a contact
+        </button>
+      )}
+      {contacts !== null && contacts.length > 0 && (
+        <button
+          type="button"
+          className="choose-action__primary"
+          onClick={handleSend}
+          disabled={isBusy || selectedIds.size === 0}
+        >
+          {isBusy ? 'Sending…' : 'Send my summary'}
+        </button>
       )}
     </main>
   );
