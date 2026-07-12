@@ -40,16 +40,16 @@ export default function HelplinePage() {
     <main className="helpline-page">
       <h1 className="helpline-page__heading">Get help with a scam</h1>
 
-      {items === null && !loadError && (
-        <p className="helpline-page__hint">Loading&hellip;</p>
-      )}
+      {/* Always-mounted live region for the transient states (same pattern
+          as the F5 screens) — a live region that mounts already holding text
+          is never announced, so the element must exist before the message. */}
+      <p className="helpline-page__status" role="status" aria-live="polite">
+        {loadError || (items === null ? 'Loading…' : '')}
+      </p>
       {loadError && (
-        <>
-          <p className="helpline-page__error">{loadError}</p>
-          <button type="button" className="helpline-page__retry" onClick={load}>
-            Try again
-          </button>
-        </>
+        <button type="button" className="helpline-page__retry" onClick={load}>
+          Try again
+        </button>
       )}
       {items !== null && items.length === 0 && (
         <p className="helpline-page__hint">

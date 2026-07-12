@@ -40,6 +40,29 @@ async def test_ensure_seeded_inserts_once(session):
     assert len(await helpline_model.list_all(session)) == 1
 
 
+async def test_ensure_seeded_backfills_rows_added_later(session, monkeypatch):
+    # The comment over HELPLINES promises future rows "get added HERE" — so a
+    # row appended after a database was first seeded must still reach it on
+    # the next boot (per-row seeding, review finding 2).
+    await seed.ensure_seeded(session)
+    grown = seed.HELPLINES + [
+        {
+            "name": "Eldercare Locator",
+            "phone": "800-677-1116",
+            "hours": "Monday to Friday, 9am to 8pm ET",
+            "description": "Connects older adults with local support services.",
+        }
+    ]
+    monkeypatch.setattr(seed, "HELPLINES", grown)
+    await seed.ensure_seeded(session)
+    rows = await helpline_model.list_all(session)
+    assert {r.name for r in rows} == {row["name"] for row in grown}
+
+    # Still idempotent afterwards: one more restart adds nothing.
+    await seed.ensure_seeded(session)
+    assert len(await helpline_model.list_all(session)) == len(grown)
+
+
 # ── HTTP endpoint ────────────────────────────────────────────────────────────
 
 

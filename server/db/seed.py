@@ -6,14 +6,20 @@
 #     database (teammate setup, Render deploy) seeds itself with no manual step
 #   - `python -m db.seed` (from server/) does create_all + seed standalone
 #
-# ensure_seeded is idempotent by design: it only inserts when the table is
-# EMPTY. That means restarts never duplicate rows, and rows added later by
-# hand are never fought with — this is "make sure there's something", not a
-# sync tool.
+# ensure_seeded is idempotent per row: it inserts any listed helpline whose
+# name isn't in the table yet. Restarts never duplicate rows, rows edited by
+# hand are never overwritten (matching is by name only, nothing is updated or
+# deleted) — and a row added to HELPLINES later reaches every existing
+# database, including production, on its next boot.
+#
+# Known limitation: the check-then-insert isn't atomic, so two workers booting
+# at the same instant could both insert the same row. Not reachable today
+# (Render runs WEB_CONCURRENCY=1); if we ever scale workers, switch to an
+# ON CONFLICT upsert keyed on name.
 
 import asyncio
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.base import Base
@@ -36,13 +42,12 @@ HELPLINES = [
 
 
 async def ensure_seeded(session: AsyncSession) -> None:
-    """Insert the pre-loaded helplines iff the table is empty."""
-    count = (
-        await session.execute(select(func.count()).select_from(Helpline))
-    ).scalar()
-    if count:
+    """Insert any pre-loaded helpline not already present (matched by name)."""
+    existing = set((await session.execute(select(Helpline.name))).scalars())
+    missing = [row for row in HELPLINES if row["name"] not in existing]
+    if not missing:
         return
-    session.add_all([Helpline(**row) for row in HELPLINES])
+    session.add_all([Helpline(**row) for row in missing])
     await session.commit()
 
 
