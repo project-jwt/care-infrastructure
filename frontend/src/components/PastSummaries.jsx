@@ -7,8 +7,11 @@
 //   edit           -> textarea over the summary text (PATCH /api/summaries/:id)
 //   confirm-delete -> Delete is TWO presses, never one (DELETE /api/summaries/:id)
 //
-// Rendered from App's VIEWS map, so props are { user, onNavigate } — neither
-// is needed here (the token scopes every request to the logged-in user).
+// Rendered from App's VIEWS map, so props are { user, onNavigate,
+// onSendSummary } — only onSendSummary(id) is used here: it hands the open
+// summary's id back to App, which re-enters the choose-action send flow.
+// That's the send path for anyone who saved before adding contacts (or who
+// just wants to re-send an old summary).
 
 import { useEffect, useState } from 'react';
 import {
@@ -17,17 +20,10 @@ import {
   listSummaries,
   updateSummary,
 } from '../adapters/summaries-adapters';
+import { formatDate } from '../utils';
 import './PastSummaries.css';
 
-// "2026-07-09T23:09:50Z" -> "July 9, 2026" — plain dates, no timestamps.
-const formatDate = (iso) =>
-  new Date(iso).toLocaleDateString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-export default function PastSummaries() {
+export default function PastSummaries({ onSendSummary }) {
   const [items, setItems] = useState(null); // null = still loading
   const [loadError, setLoadError] = useState(null);
 
@@ -230,9 +226,19 @@ export default function PastSummaries() {
         </>
       ) : (
         <>
+          {/* Send stays the filled, dominant action — same rule as the
+              choose screen. */}
           <button
             type="button"
             className="past-summaries__primary"
+            onClick={() => onSendSummary(selected.id)}
+            disabled={isBusy}
+          >
+            Send to my trusted contacts
+          </button>
+          <button
+            type="button"
+            className="past-summaries__secondary"
             onClick={() => {
               setEditText(selected.summaryText);
               setMode('edit');

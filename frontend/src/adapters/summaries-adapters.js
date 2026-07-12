@@ -37,9 +37,10 @@ export const updateSummary = (id, summaryText) =>
 export const deleteSummary = (id) =>
   handleFetch(`/api/summaries/${id}`, { method: 'DELETE' });
 
-// Emails the summary to trusted contacts and records each send.
-// NOTE: the backend route is not built yet (needs trusted contacts +
-// core/email) — this adapter matches the spec contract for when it lands.
+// Emails the summary to trusted contacts and records each send. Returns
+// { summaryId, sentTo: [{ contactId, sentAt }] }. Errors: 404 summary not
+// found (or not the caller's), 403 a contactId is not a trusted contact,
+// 502 the email service failed (nothing recorded), 422 empty contactIds.
 export const sendSummary = (id, contactIds) =>
   handleFetch(`/api/summaries/${id}/send`, {
     method: 'POST',

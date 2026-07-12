@@ -16,6 +16,7 @@ import BottomNav from './components/BottomNav';
 import PrimaryHome from './components/PrimaryHome';
 import RecordingPage from './components/RecordingPage';
 import SummaryReview from './components/SummaryReview';
+import ChooseAction from './components/ChooseAction';
 import ContactDashboard from './components/ContactDashboard';
 import PastSummaries from './components/PastSummaries';
 import TrustedContactsList from './components/TrustedContactsList';
@@ -38,6 +39,13 @@ export default function App() {
   // the raw transcript and the AI-drafted summary the user will edit/approve.
   const [transcript, setTranscript] = useState('');
   const [summaryText, setSummaryText] = useState('');
+  // The summary the choose-action step will send (what /:id/send needs).
+  // Set on save (review step) or from History's send button; cleared when
+  // the user navigates out of the flow so no stale id lingers.
+  const [savedSummaryId, setSavedSummaryId] = useState(null);
+  // True while ChooseAction has a send in flight — freezes BottomNav so the
+  // request's outcome can't be lost to a mid-send navigation.
+  const [navLocked, setNavLocked] = useState(false);
 
   // On first load: if a token survived a refresh, ask the backend who it
   // belongs to. Only an explicit rejection (401/403 = expired, forged, user
@@ -65,6 +73,14 @@ export default function App() {
     setView('home');
   };
 
+  // The one navigation path handed to child screens: leaving for anywhere
+  // but the choose-action flow drops the pending summary id, so no stale id
+  // lingers behind a later visit.
+  const navigate = (next) => {
+    if (next !== 'choose-action') setSavedSummaryId(null);
+    setView(next);
+  };
+
   const handleLogout = () => {
     logout(); // clears the stored token
     setUser(null);
@@ -79,9 +95,10 @@ export default function App() {
   const isPrimary = user.role === 'primary';
   const CurrentView = VIEWS[view] ?? PrimaryHome;
 
-  // The speak → review flow hands the transcript between steps, which the
-  // uniform VIEWS map (user/onNavigate only) can't express — so those two
-  // screens render explicitly instead of living in the map.
+  // The speak → review → choose-action flow hands per-flow state between
+  // steps (transcript, then the saved summary's id), which the uniform VIEWS
+  // map (user/onNavigate only) can't express — so those three screens render
+  // explicitly instead of living in the map.
   let primaryScreen;
   if (view === 'recording') {
     primaryScreen = (
@@ -95,18 +112,41 @@ export default function App() {
       />
     );
   } else if (view === 'review') {
-    // SummaryReview is still a stub; the transcript and AI-drafted summary
-    // props are ready for the ticket that builds it.
     primaryScreen = (
       <SummaryReview
         user={user}
         transcript={transcript}
         summaryText={summaryText}
-        onNavigate={setView}
+        onSaved={(id) => {
+          setSavedSummaryId(id);
+          setView('choose-action');
+        }}
+        onNavigate={navigate}
+      />
+    );
+  } else if (view === 'choose-action' && savedSummaryId != null) {
+    // The null guard is defensive: a refresh mid-flow resets view to 'home'
+    // anyway, and the saved summary is always waiting under History.
+    primaryScreen = (
+      <ChooseAction
+        summaryId={savedSummaryId}
+        onNavigate={navigate}
+        onBusyChange={setNavLocked}
       />
     );
   } else {
-    primaryScreen = <CurrentView user={user} onNavigate={setView} />;
+    primaryScreen = (
+      <CurrentView
+        user={user}
+        onNavigate={navigate}
+        // History's per-summary send button re-enters the choose-action
+        // flow with that summary's id (ignored by the other views).
+        onSendSummary={(id) => {
+          setSavedSummaryId(id);
+          setView('choose-action');
+        }}
+      />
+    );
   }
 
   return (
@@ -121,7 +161,7 @@ export default function App() {
         {isPrimary ? primaryScreen : <ContactDashboard user={user} />}
       </div>
 
-      {isPrimary && <BottomNav active={view} onNavigate={setView} />}
+      {isPrimary && <BottomNav active={view} onNavigate={navigate} disabled={navLocked} />}
     </div>
   );
 }

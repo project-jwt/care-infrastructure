@@ -4,26 +4,27 @@
 // The summary arrives from RecordingPage in the user's own words. They read
 // it, fix anything, and press the one primary action — which calls
 // POST /api/summaries (saveSummary) with the raw transcript riding along so
-// the History detail view can show it later. A saved confirmation replaces
-// the form; ChooseAction (send to contact / call helpline) is a later ticket
-// and picks up from here.
+// the History detail view can show it later. On success the saved summary's
+// id is handed up via onSaved, and App moves the flow to ChooseAction
+// (send to contacts / call helpline) — same hand-off convention as
+// RecordingPage's onContinue.
 //
 // Props:
 //   transcript  — raw speech-to-text words (optional in the save contract)
 //   summaryText — the AI draft handed up from RecordingPage
+//   onSaved(summaryId) — hand-off to the choose-action step after a save
 //   onNavigate(view) — App's view switcher
 
 import { useState } from 'react';
 import { saveSummary } from '../adapters/summaries-adapters';
 import './SummaryReview.css';
 
-export default function SummaryReview({ transcript, summaryText, onNavigate }) {
+export default function SummaryReview({ transcript, summaryText, onSaved, onNavigate }) {
   // The textarea is the single source of truth — initialized with the AI
   // draft, then the user's edits win. A textarea (not rendered HTML) keeps
   // the \n\n paragraph breaks visible and editable as real blank lines.
   const [text, setText] = useState(summaryText || '');
   const [isSaving, setIsSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
   const canSave = !isSaving && text.trim().length > 0;
@@ -31,7 +32,7 @@ export default function SummaryReview({ transcript, summaryText, onNavigate }) {
   const handleSave = async () => {
     setIsSaving(true);
     setSaveError(null);
-    const { error } = await saveSummary({
+    const { data, error } = await saveSummary({
       transcript: transcript || null, // '' -> null: the contract's "no transcript"
       summaryText: text.trim(),
     });
@@ -41,28 +42,10 @@ export default function SummaryReview({ transcript, summaryText, onNavigate }) {
       setSaveError("We couldn't save your summary just now. Please try again.");
       return;
     }
-    setSaved(true);
+    // Hand the new summary's id up — ChooseAction needs it for /:id/send.
+    // This unmounts the form, so there's no way to double-save.
+    onSaved(data.id);
   };
-
-  // After a successful save the form is gone — one clear next step, no way
-  // to double-save the same summary.
-  if (saved) {
-    return (
-      <main className="summary-review">
-        <h1 className="summary-review__heading">Saved</h1>
-        <p className="summary-review__hint">
-          Your summary is safe. You can find it any time under History.
-        </p>
-        <button
-          type="button"
-          className="summary-review__save"
-          onClick={() => onNavigate('home')}
-        >
-          Back to home
-        </button>
-      </main>
-    );
-  }
 
   return (
     <main className="summary-review">
