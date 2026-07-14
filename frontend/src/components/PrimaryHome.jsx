@@ -1,20 +1,51 @@
-// Primary user's home — the single "Speak Now" action (spec §MVP 2).
-// Kept deliberately minimal: the full home screen belongs to its own ticket;
-// this just makes the speak → review flow reachable.
-// props: onNavigate(view) = App's view setter (per the App shell convention).
+// Primary user's home — big-button screen per the wireframe (spec §MVP 2).
+// Speak Now is the single dominant action (starts the speak → review flow);
+// below it, one big button into each of the three BottomNav flows.
+// props: user = logged-in user, onNavigate(view) = App's view setter.
 
-export default function PrimaryHome({ onNavigate }) {
+import './PrimaryHome.css';
+
+// Same views BottomNav points at, but as full-width on-screen buttons —
+// easier targets for the 65+ audience than the small fixed nav alone.
+const FLOWS = [
+  { view: 'history', label: 'Past Summaries' },
+  { view: 'contacts', label: 'Trusted Contacts' },
+  { view: 'helpline', label: 'Helpline' },
+];
+
+export default function PrimaryHome({ user, onNavigate }) {
+  const firstName = user?.fullName?.trim().split(/\s+/)[0];
+
   return (
-    <div className="home-page">
-      <h1>Welcome</h1>
-      <p>Press the button and tell us what&rsquo;s going on.</p>
+    <main className="primary-home">
+      <h1 className="primary-home__heading">
+        {firstName ? `Welcome, ${firstName}` : 'Welcome'}
+      </h1>
+      <p className="primary-home__hint">
+        Press the button and tell us what&rsquo;s going on.
+      </p>
+
       <button
         type="button"
-        className="speak-now"
+        className="primary-home__speak"
         onClick={() => onNavigate('recording')}
       >
         Speak Now
       </button>
-    </div>
+
+      {/* Labelled so screen readers can tell these apart from the bottom nav. */}
+      <nav className="primary-home__flows" aria-label="Home shortcuts">
+        {FLOWS.map(({ view, label }) => (
+          <button
+            key={view}
+            type="button"
+            className="primary-home__flow"
+            onClick={() => onNavigate(view)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+    </main>
   );
 }
