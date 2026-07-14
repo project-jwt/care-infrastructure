@@ -1,0 +1,120 @@
+/* HelplinePage styles — own file, same conventions as
+   TrustedContactsList.css: 48px+ touch targets, large readable text, high
+   contrast, visible focus states. Mobile-first. App.css already sets the
+   48px/18px button-and-input floor — only component styling lives here. */
+
+.helpline-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+  text-align: center;
+}
+
+.helpline-page__heading {
+  font-size: 1.75rem;
+  margin: 0;
+  color: #1c2833;
+}
+
+.helpline-page__hint {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #2e4053;
+}
+
+.helpline-page__error {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #6e2c00;
+}
+
+/* Reserve a line so the layout doesn't jump when a status appears —
+   same always-mounted live-region pattern as the F5 screens. */
+.helpline-page__status {
+  min-height: 1.5rem;
+  margin: 0;
+  font-size: 1.125rem;
+  color: #6e2c00;
+}
+
+.helpline-page__retry {
+  width: 100%;
+  min-height: 56px;
+  font-size: 1.375rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  background: #1a5276;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.helpline-page__list {
+  width: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* One card per helpline: name, plain-language blurb, hours, one Call action. */
+.helpline-page__card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem 1rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  background: #ffffff;
+}
+
+.helpline-page__name {
+  font-size: 1.375rem;
+  margin: 0;
+  color: #1c2833;
+}
+
+.helpline-page__description {
+  font-size: 1.125rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #2e4053;
+}
+
+.helpline-page__hours {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0;
+  color: #1a5276;
+}
+
+/* The one-tap call action: an anchor dressed as the filled primary button.
+   Extra height + text size because this is the screen's whole purpose. */
+.helpline-page__call {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 64px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  border-radius: 0.5rem;
+  background: #1a5276;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.helpline-page__retry:focus-visible,
+.helpline-page__call:focus-visible {
+  outline: 3px solid #1a5276;
+  outline-offset: 3px;
+}
