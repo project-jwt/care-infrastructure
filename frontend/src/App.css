@@ -159,6 +159,6 @@ input {
 
 /* Frozen while a request is in flight on the current screen. */
 .bottom-nav button:disabled {
-  color: #85929e;
+  color: #707b7c;
   cursor: not-allowed;
 }

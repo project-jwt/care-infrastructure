@@ -27,7 +27,7 @@
 /* Greyed out while a request is in flight — leaving the screen mid-request
    is what crashed the failing-delete path. */
 .trusted-contacts__back:disabled {
-  color: #85929e;
+  color: #707b7c;
   cursor: not-allowed;
 }
 
@@ -70,7 +70,7 @@
   align-items: flex-start;
   gap: 0.25rem;
   padding: 0.875rem 1rem;
-  border: 2px solid #85929e;
+  border: 2px solid #707b7c;
   border-radius: 0.5rem;
   background: #ffffff;
   cursor: pointer;
@@ -139,7 +139,7 @@
   min-height: 56px;
   font-size: 1.25rem;
   padding: 0.75rem;
-  border: 2px solid #85929e;
+  border: 2px solid #707b7c;
   border-radius: 0.5rem;
   font-family: inherit;
   color: #1c2833;
@@ -188,7 +188,7 @@
   min-height: 56px;
   font-size: 1.25rem;
   font-weight: 700;
-  border: 2px solid #85929e;
+  border: 2px solid #707b7c;
   border-radius: 0.5rem;
   background: #ffffff;
   color: #1c2833;

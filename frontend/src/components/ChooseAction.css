@@ -28,7 +28,7 @@
 /* Greyed out while the send is in flight — leaving the screen mid-request
    is the bug class the F4 review caught. */
 .choose-action__back:disabled {
-  color: #85929e;
+  color: #707b7c;
   cursor: not-allowed;
 }
 
@@ -70,7 +70,7 @@
   align-items: center;
   gap: 0.875rem;
   padding: 0.875rem 1rem;
-  border: 2px solid #85929e;
+  border: 2px solid #707b7c;
   border-radius: 0.5rem;
   background: #ffffff;
   cursor: pointer;
@@ -144,7 +144,7 @@
   min-height: 56px;
   font-size: 1.25rem;
   font-weight: 700;
-  border: 2px solid #85929e;
+  border: 2px solid #707b7c;
   border-radius: 0.5rem;
   background: #ffffff;
   color: #1c2833;
