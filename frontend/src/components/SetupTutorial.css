@@ -1,0 +1,95 @@
+/* SetupTutorial styles — own file, same conventions as PastSummaries.css /
+   RecordingPage.css: 48px+ touch targets, large readable text, high contrast. */
+
+/* Catches every click/tap so the page underneath (including the highlighted
+   button) is inert while the tour runs. Sits above the fixed .bottom-nav,
+   which has no z-index of its own. */
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+/* Full-screen dim for the steps that don't point at anything. */
+.tutorial-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* Spotlight ring around the current target. The oversized box-shadow doubles
+   as the page dim, so the target itself stays at full brightness. */
+.tutorial-highlight {
+  position: fixed;
+  pointer-events: none;
+  border: 3px solid #1a73e8;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+  transition: top 0.2s, left 0.2s, width 0.2s, height 0.2s;
+}
+
+.tutorial-card {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  max-width: 420px;
+  margin: 0 auto;
+  z-index: 1001;
+  background: #fff;
+  color: #111;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.tutorial-card--center {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Arrow pointing from the card at the highlighted element. --arrow-x is set
+   inline from the measured target so it lands over the button's center. */
+.tutorial-card--below::before,
+.tutorial-card--above::before {
+  content: '';
+  position: absolute;
+  left: var(--arrow-x, 50%);
+  margin-left: -12px;
+  border: 12px solid transparent;
+}
+
+.tutorial-card--below::before {
+  bottom: 100%;
+  border-bottom-color: #fff;
+}
+
+.tutorial-card--above::before {
+  top: 100%;
+  border-top-color: #fff;
+}
+
+.tutorial-title {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+
+.tutorial-body {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.tutorial-progress {
+  margin: 0 0 16px;
+  font-size: 16px;
+  color: #555;
+}
+
+.tutorial-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+/* The forward action dominates, mirroring .primary-action. */
+.tutorial-buttons .tutorial-next {
+  flex: 1;
+  font-weight: bold;
+}

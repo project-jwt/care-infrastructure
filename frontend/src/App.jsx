@@ -12,6 +12,7 @@ import { getToken } from './adapters/fetch-helpers';
 import { logout } from './adapters/auth-adapters';
 import { getMe } from './adapters/users-adapters';
 import LoginRegisterPage from './components/LoginRegisterPage';
+import SetupTutorial from './components/SetupTutorial';
 import BottomNav from './components/BottomNav';
 import PrimaryHome from './components/PrimaryHome';
 import RecordingPage from './components/RecordingPage';
@@ -93,14 +94,21 @@ export default function App() {
   if (!user) return <LoginRegisterPage onAuth={handleAuth} />;
 
   const isPrimary = user.role === 'primary';
-  const CurrentView = VIEWS[view] ?? PrimaryHome;
+
+  // First-login walkthrough (spec §MVP 6). While it's up, force the home
+  // view so the elements it points at are actually on screen. Primary-only:
+  // the wireframe's contact flow (login → dashboard) has no onboarding step.
+  const showTutorial = isPrimary && !user.hasCompletedSetup;
+  const effectiveView = showTutorial ? 'home' : view;
+
+  const CurrentView = VIEWS[effectiveView] ?? PrimaryHome;
 
   // The speak → review → choose-action flow hands per-flow state between
   // steps (transcript, then the saved summary's id), which the uniform VIEWS
   // map (user/onNavigate only) can't express — so those three screens render
   // explicitly instead of living in the map.
   let primaryScreen;
-  if (view === 'recording') {
+  if (effectiveView === 'recording') {
     primaryScreen = (
       <RecordingPage
         onBack={() => setView('home')}
@@ -111,7 +119,7 @@ export default function App() {
         }}
       />
     );
-  } else if (view === 'review') {
+  } else if (effectiveView === 'review') {
     primaryScreen = (
       <SummaryReview
         user={user}
@@ -124,7 +132,7 @@ export default function App() {
         onNavigate={navigate}
       />
     );
-  } else if (view === 'choose-action' && savedSummaryId != null) {
+  } else if (effectiveView === 'choose-action' && savedSummaryId != null) {
     // The null guard is defensive: a refresh mid-flow resets view to 'home'
     // anyway, and the saved summary is always waiting under History.
     primaryScreen = (
@@ -161,7 +169,15 @@ export default function App() {
         {isPrimary ? primaryScreen : <ContactDashboard user={user} />}
       </div>
 
-      {isPrimary && <BottomNav active={view} onNavigate={navigate} disabled={navLocked} />}
+      {isPrimary && (
+        <BottomNav active={effectiveView} onNavigate={navigate} disabled={navLocked} />
+      )}
+
+      {showTutorial && (
+        <SetupTutorial
+          onComplete={() => setUser((u) => ({ ...u, hasCompletedSetup: true }))}
+        />
+      )}
     </div>
   );
 }
