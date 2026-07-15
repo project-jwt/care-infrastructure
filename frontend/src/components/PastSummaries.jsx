@@ -8,10 +8,11 @@
 //   confirm-delete -> Delete is TWO presses, never one (DELETE /api/summaries/:id)
 //
 // Rendered from App's VIEWS map, so props are { user, onNavigate,
-// onSendSummary } — only onSendSummary(id) is used here: it hands the open
-// summary's id back to App, which re-enters the choose-action send flow.
-// That's the send path for anyone who saved before adding contacts (or who
-// just wants to re-send an old summary).
+// onSendSummary }. onNavigate('home') backs the list out to the home screen
+// (BottomNav has no Home item — the wireframe caps it at 3). onSendSummary(id)
+// hands the open summary's id back to App, which re-enters the choose-action
+// send flow — the send path for anyone who saved before adding contacts (or
+// who just wants to re-send an old summary).
 
 import { useEffect, useState } from 'react';
 import {
@@ -23,7 +24,7 @@ import {
 import { formatDate } from '../utils';
 import './PastSummaries.css';
 
-export default function PastSummaries({ onSendSummary }) {
+export default function PastSummaries({ onNavigate, onSendSummary }) {
   const [items, setItems] = useState(null); // null = still loading
   const [loadError, setLoadError] = useState(null);
 
@@ -99,6 +100,13 @@ export default function PastSummaries({ onSendSummary }) {
   if (mode === 'list') {
     return (
       <main className="past-summaries">
+        <button
+          type="button"
+          className="past-summaries__back"
+          onClick={() => onNavigate('home')}
+        >
+          &larr; Home
+        </button>
         <h1 className="past-summaries__heading">Your summaries</h1>
 
         {items === null && !loadError && (
