@@ -14,8 +14,11 @@ import './SetupTutorial.css';
 
 // Each step highlights one real element (target = CSS selector) or none
 // (target = null → centered card over a full dim). The speak-now selector
-// matches both the current markup and the F6 rewrite (.primary-home__speak);
-// the nav buttons are targeted by position since NAV_ITEMS' order is fixed.
+// matches both the current markup and the F6 rewrite (.primary-home__speak).
+// Nav steps also carry a label: among the target's matches, the button whose
+// text equals the label wins — so the tutorial keeps pointing at the right
+// tab no matter how NAV_ITEMS is reordered or grows (e.g. the Home tab
+// PR #18 adds in first position).
 const STEPS = [
   {
     id: 'welcome',
@@ -32,21 +35,24 @@ const STEPS = [
   },
   {
     id: 'history',
-    target: '.bottom-nav button:nth-child(1)',
+    target: '.bottom-nav button',
+    label: 'History',
     placement: 'above',
     title: 'Look back anytime',
     body: 'Tap History to read the updates you’ve shared before.',
   },
   {
     id: 'contacts',
-    target: '.bottom-nav button:nth-child(2)',
+    target: '.bottom-nav button',
+    label: 'Contacts',
     placement: 'above',
     title: 'Your trusted people',
     body: 'Tap Contacts to see the family and friends who receive your updates.',
   },
   {
     id: 'helpline',
-    target: '.bottom-nav button:nth-child(3)',
+    target: '.bottom-nav button',
+    label: 'Helpline',
     placement: 'above',
     title: 'Help is always here',
     body: 'If you ever need to talk to someone right away, tap Helpline.',
@@ -58,6 +64,17 @@ const STEPS = [
     body: 'That’s everything. You won’t see this tour again.',
   },
 ];
+
+// The element a step points at: first match of its selector, or — when the
+// step has a label — the match whose visible text equals it.
+const findTarget = (step) => {
+  if (!step.target) return null;
+  const matches = [...document.querySelectorAll(step.target)];
+  if (step.label) {
+    return matches.find((el) => el.textContent.trim() === step.label) ?? null;
+  }
+  return matches[0] ?? null;
+};
 
 const HIGHLIGHT_PAD = 6; // px the ring extends past the target on each side
 const CARD_GAP = 20; // px between the target and the card (arrow lives here)
@@ -77,7 +94,7 @@ export default function SetupTutorial({ onComplete }) {
 
   useLayoutEffect(() => {
     const measure = () => {
-      const el = step.target ? document.querySelector(step.target) : null;
+      const el = findTarget(step);
       setRect(el ? el.getBoundingClientRect() : null);
     };
     measure();
