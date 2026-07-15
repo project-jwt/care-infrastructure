@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     # without a key, which is visible enough for a dev-only feature gap.
     gemini_api_key: str = ""
 
+    # Deepgram speech-to-text, used only by the audio-transcription route
+    # (iOS / browsers without the Web Speech API). Blank is fine: the route
+    # 502s without it and the frontend falls back to typing, so the app still
+    # boots and every other feature works. Get a free key at deepgram.com.
+    deepgram_api_key: str = ""
+
 
 # Instantiated ONCE at import time — this line is what actually reads .env and
 # validates. Every other file just does `from config import settings`.

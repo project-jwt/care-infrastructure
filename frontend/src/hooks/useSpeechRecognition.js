@@ -31,11 +31,28 @@ export default function useSpeechRecognition() {
 
   // Holds the active recognition instance between renders.
   const recognitionRef = useRef(null);
+  // Watchdog timer: iOS Safari can leave a session open with no onend/onresult
+  // ever firing, which would freeze the whole screen (the UI gates on
+  // isListening). This forces the UI back to idle after a hard cap.
+  const timeoutRef = useRef(null);
+
+  // Force the UI back to idle. Called from stop(), onerror, and the watchdog —
+  // NOT only from onend, because iOS Safari often never fires onend after a
+  // stop() or an error, which used to leave isListening stuck true forever.
+  function resetToIdle() {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setIsListening(false);
+    setInterimText('');
+  }
 
   // If the user leaves the page mid-recording, kill the session so the mic
   // doesn't stay hot. abort() (vs stop()) discards pending results.
   useEffect(() => {
     return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (recognitionRef.current) recognitionRef.current.abort();
     };
   }, []);
@@ -80,27 +97,42 @@ export default function useSpeechRecognition() {
       } else if (event.error !== 'aborted') {
         setError('Something went wrong with the microphone. You can type instead.');
       }
+      // Always free the UI on error — iOS Safari may not fire onend afterwards.
+      resetToIdle();
     };
 
     // With continuous: false the browser ends the session on its own after a
     // pause in speech — this handler resets the UI whether the user pressed
     // Stop or simply stopped talking.
     recognition.onend = () => {
-      setIsListening(false);
-      setInterimText('');
       recognitionRef.current = null;
+      resetToIdle();
     };
 
+    // Re-entry safety: with the optimistic resetToIdle() in stop(), isListening
+    // can be false while an old iOS session is still alive. Abort it before
+    // starting a fresh one so we never double-capture.
+    if (recognitionRef.current) recognitionRef.current.abort();
     recognitionRef.current = recognition;
     setError(null);
     setIsListening(true);
     recognition.start();
+
+    // Hard cap so a session that never ends on its own (iOS) can't freeze the
+    // screen. onFinal has already committed any finalized phrases by then.
+    timeoutRef.current = setTimeout(() => {
+      if (recognitionRef.current) recognitionRef.current.abort();
+      resetToIdle();
+    }, 20000);
   }
 
   // stop() (not abort) so any phrase still being processed flushes through
-  // onresult before onend fires.
+  // onresult first. But free the UI immediately rather than waiting for onend —
+  // on iOS Safari that event often never arrives, which left Stop unable to
+  // end the session and froze the page.
   function stop() {
     if (recognitionRef.current) recognitionRef.current.stop();
+    resetToIdle();
   }
 
   return { isSupported, isListening, interimText, micDenied, error, start, stop };
