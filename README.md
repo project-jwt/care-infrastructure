@@ -33,8 +33,6 @@ uvicorn main:app --reload --port 8000
 
 Tables are created automatically on startup — no migration step. The API is at `http://127.0.0.1:8000/api`.
 
-**Email delivery:** summary emails send from `EMAIL_SENDER` (optional, see `.env.example`). The default is Resend's sandbox address, which only delivers to the Resend account's own email — every other recipient is rejected, which the app reports per contact. For real recipients, verify a domain at [resend.com/domains](https://resend.com/domains) and set `EMAIL_SENDER` to an address on it (locally and on Render).
-
 ### Frontend
 
 ```bash

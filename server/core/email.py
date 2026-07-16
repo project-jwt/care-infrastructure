@@ -2,9 +2,8 @@
 #
 # Same shape as core/ai.py: configure the SDK once at import, expose one
 # function, raise on failure and let the router translate that into a 502.
-# The From address comes from EMAIL_SENDER (see config.py) — the default is
-# Resend's sandbox address, which only delivers to our own account email;
-# production overrides it with an address on the verified domain.
+# Sender stays onboarding@resend.dev (Resend's sandbox address) until a real
+# domain is verified.
 
 import asyncio
 import html
@@ -15,6 +14,8 @@ from resend.exceptions import ResendError
 from config import settings
 
 resend.api_key = settings.resend_api_key
+
+SENDER = "J.W.T <onboarding@resend.dev>"
 
 
 class EmailSendError(Exception):
@@ -49,7 +50,7 @@ async def send_summary_email(
     )
 
     params: resend.Emails.SendParams = {
-        "from": settings.email_sender,
+        "from": SENDER,
         "to": [to_email],
         "subject": f"{sender_label} shared a summary with you",
         "html": body,
