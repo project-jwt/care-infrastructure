@@ -87,9 +87,15 @@ Decide between exactly two responses:
      summary with what you have rather than asking again.
 """
 
-# NOTE: the spec named gemini-2.0-flash, but its free tier was retired
-# (429 with "limit: 0") — 2.5-flash is the current free-tier flash model.
-model = genai.GenerativeModel("gemini-2.5-flash", system_instruction=SYSTEM_PROMPT)
+# NOTE: model history driven by Google's shrinking free tiers —
+#   2.0-flash: free tier retired (429 "limit: 0")
+#   2.5-flash: free tier slashed to ~20 requests/day (Dec 2025)
+#   3.5-flash: times out on this key (504) — not usable
+#   3-flash-preview: responds, great quality, BUT latency spikes to 40-100s
+#                    and it's a gated preview (may 404 on other accounts) — unusable
+#   3.1-flash-lite: generally available (non-preview), aiming for fast + real
+#                    free tier. Same GEMINI_API_KEY; no key change.
+model = genai.GenerativeModel("gemini-3.1-flash-lite", system_instruction=SYSTEM_PROMPT)
 
 
 async def draft_summary(transcript: str, answers: list[ClarifyingAnswer]) -> DraftOut:
