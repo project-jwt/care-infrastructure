@@ -7,12 +7,13 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.ai import draft_summary
 from core.email import EmailSendError, send_summary_email
+from core.transcription import TranscriptionError, transcribe_audio
 from dependencies.auth import require_primary
 from dependencies.db import get_db
 from models import contact_model, summary_model, user_model
@@ -27,7 +28,13 @@ from schemas.summary import (
     SummaryListOut,
     SummaryOut,
     SummaryUpdate,
+    TranscriptOut,
 )
+
+# Reject audio uploads larger than this before spending a transcription call.
+# A spoken problem description is seconds long; anything much bigger is a
+# mistake or abuse, not a real recording.
+MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +60,32 @@ async def draft(body: DraftIn, user: User = Depends(require_primary)):
         # instead of flattening everything into the same 502.
         logger.exception("draft_summary failed")
         raise HTTPException(status_code=502, detail="Could not generate a summary right now — please try again")
+
+
+@router.post("/transcribe", response_model=TranscriptOut)
+async def transcribe(
+    audio: UploadFile = File(...),
+    user: User = Depends(require_primary),
+):
+    """POST /api/summaries/transcribe  (multipart form, field "audio") -> { transcript }
+
+    For iOS / browsers without the Web Speech API: the frontend records the
+    user speaking and uploads the clip here to be transcribed. Primary-only,
+    like /draft — it's part of the same speak flow. Stateless, no DB.
+    """
+    audio_bytes = await audio.read()
+    if len(audio_bytes) > MAX_AUDIO_BYTES:
+        # 413 (not 502): the client sent too much — a real, actionable status.
+        raise HTTPException(status_code=413, detail="That recording is too large.")
+    try:
+        transcript = await transcribe_audio(audio_bytes, audio.content_type or "")
+        return TranscriptOut(transcript=transcript)
+    except TranscriptionError:
+        # No key, provider outage, or unusable audio — not the client's fault,
+        # and the raw error may mention internals, so log it and send a generic
+        # 502. The frontend falls back to letting the user type.
+        logger.exception("transcribe_audio failed")
+        raise HTTPException(status_code=502, detail="Could not turn your recording into words — please try again or type instead")
 
 
 @router.post("", response_model=SummaryOut, status_code=201)
