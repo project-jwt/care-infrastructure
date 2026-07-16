@@ -77,10 +77,12 @@ export const updateSummary = (id, summaryText) =>
 export const deleteSummary = (id) =>
   handleFetch(`/api/summaries/${id}`, { method: 'DELETE' });
 
-// Emails the summary to trusted contacts and records each send. Returns
-// { summaryId, sentTo: [{ contactId, sentAt }] }. Errors: 404 summary not
-// found (or not the caller's), 403 a contactId is not a trusted contact,
-// 502 the email service failed (nothing recorded), 422 empty contactIds.
+// Emails the summary to trusted contacts and records each successful send.
+// Returns { summaryId, sentTo: [{ contactId, sentAt }], failed: [{ contactId }] }
+// — failed is non-empty on a partial send (retry just those ids). Errors:
+// 404 summary not found (or not the caller's), 403 a contactId is not a
+// trusted contact, 502 EVERY email failed (nothing recorded), 422 empty
+// contactIds.
 export const sendSummary = (id, contactIds) =>
   handleFetch(`/api/summaries/${id}/send`, {
     method: 'POST',

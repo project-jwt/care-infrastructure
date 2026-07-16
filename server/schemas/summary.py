@@ -99,12 +99,25 @@ class SentTo(CamelModel):
     sent_at: datetime
 
 
+class SendFailure(CamelModel):
+    """One recipient the email provider rejected: { contactId }. An object
+    rather than a bare id so a reason can be added later without changing
+    the shape."""
+
+    contact_id: int
+
+
 class SendOut(CamelModel):
     """POST /api/summaries/:id/send response:
-    { summaryId, sentTo: [ { contactId, sentAt } ] }"""
+    { summaryId, sentTo: [ { contactId, sentAt } ], failed: [ { contactId } ] }
+
+    failed defaults to [] so an all-success response keeps its original
+    shape; it's only non-empty on a partial send (some recipients' emails
+    went out, the rest can be retried)."""
 
     summary_id: int
     sent_to: list[SentTo]
+    failed: list[SendFailure] = []
 
 
 class SummarySender(CamelModel):

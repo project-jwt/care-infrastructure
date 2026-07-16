@@ -32,7 +32,10 @@ export default function ChooseAction({ summaryId, onNavigate, onBusyChange }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [isBusy, setIsBusy] = useState(false); // the send request is in flight
   const [actionError, setActionError] = useState(null);
-  const [sentNames, setSentNames] = useState([]); // for the confirmation
+  // Names of everyone who has received THIS summary across send attempts —
+  // a partial send can take two or three tries to reach everyone, and the
+  // final confirmation should name them all, not just the last batch.
+  const [sentNames, setSentNames] = useState([]);
 
   // Mirror the in-flight state up to App so BottomNav freezes too — this
   // screen already disables its own controls mid-send for exactly this
@@ -84,22 +87,41 @@ export default function ChooseAction({ summaryId, onNavigate, onBusyChange }) {
         setSelectedIds(new Set());
         loadContacts();
       } else if (error.status === 502) {
-        // The email service failed partway: no sends were recorded, but the
-        // backend emails sequentially, so some may already have been
-        // delivered — don't promise a clean retry. The summary itself is
-        // safe either way.
+        // 502 now means EVERY email failed: the backend records nothing in
+        // that case, so the selection is still right and retrying the same
+        // send is genuinely safe. (Partial sends come back as a success
+        // with a `failed` list — handled below.)
         setActionError(
-          'Some of the emails may have already gone out. Your summary is saved — please check with your contacts before sending again.'
+          "We couldn't send your summary — no emails went out. Your summary is saved; please try again."
         );
       } else {
         setActionError("We couldn't send your summary. Please try again.");
       }
       return;
     }
-    // Name the recipients on the confirmation — map the response's ids back
-    // to the contacts we listed.
+    // Name the recipients — map the response's ids back to the contacts we
+    // listed. sentNames accumulates (deduped) across attempts so a summary
+    // delivered over two tries still confirms with everyone's name.
     const sentIds = new Set(data.sentTo.map((s) => s.contactId));
-    setSentNames(contacts.filter((c) => sentIds.has(c.contactId)).map(displayName));
+    const newNames = contacts.filter((c) => sentIds.has(c.contactId)).map(displayName);
+    setSentNames((prev) => [...new Set([...prev, ...newNames])]);
+
+    const failedIds = new Set((data.failed ?? []).map((f) => f.contactId));
+    if (failedIds.size > 0) {
+      // Partial send: some emails went out, the rest were rejected by the
+      // provider. Keep ONLY the failures selected, so the send button
+      // naturally retries just them — nobody gets the summary twice.
+      const failedNames = contacts
+        .filter((c) => failedIds.has(c.contactId))
+        .map(displayName);
+      setSelectedIds(failedIds);
+      setActionError(
+        `Sent to ${newNames.join(', ')}. We couldn't reach ${failedNames.join(
+          ', '
+        )} — press Send again to retry just them.`
+      );
+      return;
+    }
     setMode('sent');
   };
 

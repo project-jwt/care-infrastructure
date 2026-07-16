@@ -152,7 +152,10 @@ async def record_send(
         first (spec: 404) — otherwise a caller could record sends of
         someone else's summary;
       - it MUST validate every contact id via contact_model.is_contact_of
-        (B2) before any email goes out, so a failed send records nothing.
+        (B2) before any email goes out, and only pass in ids whose email
+        actually went out — rows here are what the contact dashboard shows,
+        so recording an undelivered send would tell the contact a summary
+        arrived when it didn't.
     """
     # Empty list = no-op (return early). Without this, insert().values([])
     # compiles to "INSERT ... DEFAULT VALUES" — a phantom row that violates
