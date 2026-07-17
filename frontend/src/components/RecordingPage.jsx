@@ -8,11 +8,12 @@
 // returns a finished summary, which is handed up through onContinue.
 //
 // Two ways to speak, chosen per device (see inputMode below):
-//   'live'   — the browser's Web Speech API (desktop Chrome, Android): the
-//              words stream in as you talk, free and instant.
-//   'record' — record the mic and transcribe server-side (iOS, where the Web
-//              Speech API is unreliable/absent): you speak, then the words
-//              appear once the recording is transcribed.
+//   'live'   — the browser's Web Speech API (desktop): the words stream in
+//              as you talk, free and instant.
+//   'record' — record the mic and transcribe server-side (phones/tablets,
+//              where Web Speech exists but ignores continuous mode and loses
+//              words on stop): you speak, then the words appear once the
+//              recording is transcribed.
 //   'type'   — no working mic path: the textarea is the only input.
 //
 // Props:
@@ -24,6 +25,7 @@ import { useState } from 'react';
 import useSpeechRecognition from '../hooks/useSpeechRecognition';
 import useAudioTranscription from '../hooks/useAudioTranscription';
 import { draftSummary } from '../adapters/summaries-adapters';
+import { isMobileDevice } from '../utils/device';
 import './RecordingPage.css';
 
 export default function RecordingPage({ onContinue, onBack }) {
@@ -45,10 +47,13 @@ export default function RecordingPage({ onContinue, onBack }) {
   const speech = useSpeechRecognition();
   const audio = useAudioTranscription();
 
-  // Prefer the live Web Speech API where it works. Only fall to recording when
-  // it doesn't (iOS) — that keeps the free, instant path on the browsers that
-  // support it and spends a transcription call only where it's actually needed.
-  const speechLive = speech.isSupported && !speech.micDenied;
+  // Prefer the live Web Speech API where it actually works — desktop. Mobile
+  // browsers expose the API too, but ignore continuous mode (the session dies
+  // at the first pause) and only deliver results after the session ends (so
+  // stopping loses the words) — there, recording + server transcription is
+  // the reliable path. Typing is the final fallback either way.
+  const preferRecord = isMobileDevice() && audio.isSupported;
+  const speechLive = !preferRecord && speech.isSupported && !speech.micDenied;
   const canRecord = !speechLive && audio.isSupported && !audio.micDenied;
   const inputMode = speechLive ? 'live' : canRecord ? 'record' : 'type';
 
