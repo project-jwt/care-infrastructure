@@ -4,7 +4,7 @@
 # every recipient gets an attempt, successes are recorded in
 # summary_recipients and returned in sentTo, provider failures come back in
 # `failed`, and 502 is reserved for the nothing-went-out case. The email
-# provider itself is faked at the router's import site — no Resend traffic.
+# provider itself is faked at the router's import site — no SMTP traffic.
 
 from sqlalchemy import select
 

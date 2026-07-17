@@ -10,7 +10,7 @@ A voice-first tool for adults 65+: the primary user speaks an issue, AI turns it
 - **Frontend:** React + Vite
 - **Database:** Postgres
 - **LLM:** Google Gemini (`gemini-2.0-flash`) via `google-generativeai`
-- **Email:** Resend via `resend`
+- **Email:** Gmail SMTP via stdlib `smtplib` (dedicated Gmail account + app password)
 - **Deploy target:** Render
 
 ## Local development
@@ -25,7 +25,7 @@ python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-cp .env.example .env             # then fill in DATABASE_URL, JWT_SECRET, and RESEND_API_KEY
+cp .env.example .env             # then fill in DATABASE_URL, JWT_SECRET, GMAIL_ADDRESS + GMAIL_APP_PASSWORD
 createdb care_infrastructure     # or create the database named in your DATABASE_URL
 
 uvicorn main:app --reload --port 8000
@@ -74,7 +74,7 @@ care-infrastructure/
 │
 ├── server/                               # FastAPI app
 │   ├── main.py                           # builds the FastAPI app and registers every router under /api
-│   ├── config.py                         # Settings loaded from .env (DB url, JWT secret/alg/expiry, Gemini + Resend keys)
+│   ├── config.py                         # Settings loaded from .env (DB url, JWT secret/alg/expiry, Gemini key, Gmail SMTP creds)
 │   ├── requirements.txt                  # backend Python dependencies
 │   │
 │   ├── routers/                          # HTTP handlers — one file per resource (same idea as "controllers")
@@ -105,7 +105,7 @@ care-infrastructure/
 │   ├── core/
 │   │   ├── security.py                   # password hashing (bcrypt) + JWT encode/decode
 │   │   ├── ai.py                         # Gemini client + draft_summary(transcript, answers)
-│   │   └── email.py                      # Resend client + send_summary_email(to, summary_text)
+│   │   └── email.py                      # Gmail SMTP transport + send_summary_email(to, summary_text)
 │   │
 │   └── db/
 │       ├── base.py                       # SQLAlchemy DeclarativeBase every model inherits from

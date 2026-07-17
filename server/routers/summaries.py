@@ -171,7 +171,7 @@ async def send_summary(
       1. 404 unless the summary exists and is the caller's (owner-scoped).
       2. 403 if ANY contactId isn't on the caller's trusted list — checked
          before a single email goes out, so a bad id can't cause a partial send.
-      3. Email every contact, tolerating per-recipient failures: a Resend
+      3. Email every contact, tolerating per-recipient failures: a provider
          rejection for one contact must not hide that others DID get the
          email (the old first-failure-aborts version left users guessing who
          received it). Successes are recorded in summary_recipients; failures
@@ -205,7 +205,7 @@ async def send_summary(
     # One attempt per recipient, never aborting early: with a per-recipient
     # try/except, one rejected address can't mask deliveries that already
     # happened. Only EmailSendError (the provider's failures) is tolerated;
-    # a bug of ours propagates as a 500 instead of masquerading as a Resend
+    # a bug of ours propagates as a 500 instead of masquerading as a provider
     # outage.
     sent_ids: list[int] = []
     failed_ids: list[int] = []
