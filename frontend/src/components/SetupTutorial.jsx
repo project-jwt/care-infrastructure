@@ -91,6 +91,11 @@ export default function SetupTutorial({ onComplete }) {
   // the card centers over a plain dim and the tour stays completable even
   // if a selector stops matching.
   const [rect, setRect] = useState(null);
+  // Measured height of the card — the fit check below needs it before it can
+  // tell whether a positioned card would poke past a viewport edge. Content-
+  // dependent only (same width centered or positioned), so remeasuring on
+  // every render settles instead of oscillating.
+  const [cardHeight, setCardHeight] = useState(0);
   const [saving, setSaving] = useState(false);
   const cardRef = useRef(null);
   const nextButtonRef = useRef(null);
@@ -115,6 +120,11 @@ export default function SetupTutorial({ onComplete }) {
     };
   }, [step]);
 
+  useLayoutEffect(() => {
+    const height = cardRef.current.offsetHeight;
+    if (height !== cardHeight) setCardHeight(height);
+  });
+
   const finish = async () => {
     setSaving(true); // disables the button — no double PATCH
     const { error } = await markSetupComplete();
@@ -130,13 +140,24 @@ export default function SetupTutorial({ onComplete }) {
   let cardStyle;
   let placement = 'center';
   if (rect) {
-    placement = step.placement;
     highlightStyle = {
       top: rect.top - HIGHLIGHT_PAD,
       left: rect.left - HIGHLIGHT_PAD,
       width: rect.width + HIGHLIGHT_PAD * 2,
       height: rect.height + HIGHLIGHT_PAD * 2,
     };
+    // On short viewports (landscape phones) a positioned card can poke past a
+    // screen edge, and the overlay blocks scrolling it back into view — so
+    // when the card wouldn't fit on the step's side of the target, recenter
+    // it instead. The ring above still marks the target.
+    placement = step.placement;
+    if (placement === 'below' && rect.bottom + CARD_GAP + cardHeight > window.innerHeight) {
+      placement = 'center';
+    } else if (placement === 'above' && rect.top - CARD_GAP - cardHeight < 0) {
+      placement = 'center';
+    }
+  }
+  if (rect && placement !== 'center') {
     // The card is inset 16px each side and capped at 420px, centered — mirror
     // that math to aim the arrow at the target's center, clamped onto the card.
     const cardWidth = Math.min(420, window.innerWidth - 32);
@@ -153,8 +174,9 @@ export default function SetupTutorial({ onComplete }) {
     }
   }
 
-  // Minimal focus trap: Tab wraps across the card's two buttons. The overlay
-  // already blocks pointer events everywhere else.
+  // Tab wraps across the card's buttons. The app shell is inert while the
+  // tour runs (App.jsx), so this is only wrap-around comfort — without it,
+  // Tab from the last button detours through browser chrome.
   const trapFocus = (event) => {
     if (event.key !== 'Tab') return;
     const buttons = cardRef.current.querySelectorAll('button:not(:disabled)');

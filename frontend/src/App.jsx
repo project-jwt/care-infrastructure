@@ -158,26 +158,34 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <span className="app-title">J.W.T</span>
-        <button type="button" onClick={handleLogout}>Log out</button>
-      </header>
+    <>
+      {/* inert while the tour runs: the overlay already blocks pointer events,
+          but only inert keeps keyboard focus from Tabbing into the page
+          underneath (Enter on Log out or Speak Now would act through the
+          tour). '' not a boolean — React 18 renders `inert={false}` as a
+          present (and therefore active) attribute. */}
+      <div className="app-shell" inert={showTutorial ? '' : undefined}>
+        <header className="app-header">
+          <span className="app-title">J.W.T</span>
+          <button type="button" onClick={handleLogout}>Log out</button>
+        </header>
 
-      <div className="app-content">
-        {/* Contacts get one read-only screen; primaries get the view switcher. */}
-        {isPrimary ? primaryScreen : <ContactDashboard user={user} />}
+        <div className="app-content">
+          {/* Contacts get one read-only screen; primaries get the view switcher. */}
+          {isPrimary ? primaryScreen : <ContactDashboard user={user} />}
+        </div>
+
+        {isPrimary && (
+          <BottomNav active={effectiveView} onNavigate={navigate} disabled={navLocked} />
+        )}
       </div>
 
-      {isPrimary && (
-        <BottomNav active={effectiveView} onNavigate={navigate} disabled={navLocked} />
-      )}
-
+      {/* Outside the shell so the inert above can't swallow the tour itself. */}
       {showTutorial && (
         <SetupTutorial
           onComplete={() => setUser((u) => ({ ...u, hasCompletedSetup: true }))}
         />
       )}
-    </div>
+    </>
   );
 }
