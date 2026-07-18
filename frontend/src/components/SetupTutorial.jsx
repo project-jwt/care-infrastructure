@@ -4,7 +4,7 @@
 // user.hasCompletedSetup is false; "Get started" calls markSetupComplete()
 // and App flips the flag locally, so it never shows again.
 //
-// No Skip/Escape dismissal on purpose: the tour is six short steps, and a
+// No Skip/Escape dismissal on purpose: the tour is seven short steps, and a
 // dismissed-but-incomplete state would only re-show it next login anyway.
 // props: onComplete() = App's callback that flips hasCompletedSetup locally.
 
@@ -13,12 +13,11 @@ import { markSetupComplete } from '../adapters/users-adapters';
 import './SetupTutorial.css';
 
 // Each step highlights one real element (target = CSS selector) or none
-// (target = null → centered card over a full dim). The speak-now selector
-// matches both the current markup and the F6 rewrite (.primary-home__speak).
-// Nav steps also carry a label: among the target's matches, the button whose
-// text equals the label wins — so the tutorial keeps pointing at the right
-// tab no matter how NAV_ITEMS is reordered or grows (e.g. the Home tab
-// PR #18 adds in first position).
+// (target = null → centered card over a full dim). The three flow steps point
+// at the home screen's big shortcut buttons rather than the small nav tabs —
+// the tour teaches the targets the 65+ audience will actually tap. Steps may
+// also carry a label: among the target's matches, the button whose text
+// equals the label wins, so reordering FLOWS can't silently repoint a step.
 const STEPS = [
   {
     id: 'welcome',
@@ -28,34 +27,41 @@ const STEPS = [
   },
   {
     id: 'speak',
-    target: '.speak-now, .primary-home__speak',
+    target: '.primary-home__speak',
     placement: 'below',
     title: 'Tell us what’s going on',
     body: 'Tap the big Speak Now button and just talk. The app listens and writes a short summary you can check before sharing.',
   },
   {
     id: 'history',
-    target: '.bottom-nav button',
-    label: 'History',
+    target: '.primary-home__flow',
+    label: 'Past Summaries',
     placement: 'above',
     title: 'Look back anytime',
-    body: 'Tap History to read the updates you’ve shared before.',
+    body: 'Tap Past Summaries to read the updates you’ve shared before.',
   },
   {
     id: 'contacts',
-    target: '.bottom-nav button',
-    label: 'Contacts',
+    target: '.primary-home__flow',
+    label: 'Trusted Contacts',
     placement: 'above',
     title: 'Your trusted people',
-    body: 'Tap Contacts to see the family and friends who receive your updates.',
+    body: 'Tap Trusted Contacts to see the family and friends who receive your updates.',
   },
   {
     id: 'helpline',
-    target: '.bottom-nav button',
+    target: '.primary-home__flow',
     label: 'Helpline',
     placement: 'above',
     title: 'Help is always here',
     body: 'If you ever need to talk to someone right away, tap Helpline.',
+  },
+  {
+    id: 'nav',
+    target: '.bottom-nav',
+    placement: 'above',
+    title: 'Find your way around',
+    body: 'This bar stays with you on every screen. Tap Home any time to come back here.',
   },
   {
     id: 'finish',
@@ -118,7 +124,7 @@ export default function SetupTutorial({ onComplete }) {
     onComplete();
   };
 
-  // Both targets (speak-now, bottom nav) and the card render in viewport
+  // Both targets (home buttons, bottom nav) and the card render in viewport
   // coordinates, so getBoundingClientRect maps straight to position: fixed.
   let highlightStyle;
   let cardStyle;
