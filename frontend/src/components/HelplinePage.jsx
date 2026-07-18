@@ -7,8 +7,9 @@
 // to read and dial from any phone.
 //
 // Reached two ways: BottomNav "Helpline", and ChooseAction's "Call for help".
-// Rendered from App's VIEWS map, so props are { user, onNavigate } — neither
-// is needed here (the token scopes the request).
+// Rendered from App's VIEWS map, so props are { user, onNavigate } — only
+// onNavigate('home') is used, to back out to the home screen (BottomNav has
+// no Home item — the wireframe caps it at 3). The token scopes the request.
 
 import { useEffect, useState } from 'react';
 import { listHelplines } from '../adapters/helplines-adapters';
@@ -18,7 +19,7 @@ import './HelplinePage.css';
 // so the +1 prefix is assumed.
 const telHref = (phone) => `tel:+1${phone.replace(/\D/g, '')}`;
 
-export default function HelplinePage() {
+export default function HelplinePage({ onNavigate }) {
   const [items, setItems] = useState(null); // null = still loading
   const [loadError, setLoadError] = useState(null);
 
@@ -38,6 +39,13 @@ export default function HelplinePage() {
 
   return (
     <main className="helpline-page">
+      <button
+        type="button"
+        className="helpline-page__back"
+        onClick={() => onNavigate('home')}
+      >
+        &larr; Home
+      </button>
       <h1 className="helpline-page__heading">Get help with a scam</h1>
 
       {/* Always-mounted live region for the transient states (same pattern

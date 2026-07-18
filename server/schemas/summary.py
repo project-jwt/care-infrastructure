@@ -38,6 +38,14 @@ class DraftOut(CamelModel):
     summary_text: str | None = None  # only populated when the summary is ready
 
 
+class TranscriptOut(CamelModel):
+    """POST /api/summaries/transcribe response: { transcript }. The words the
+    user spoke, for browsers where the frontend records audio instead of using
+    the built-in Web Speech API (iOS)."""
+
+    transcript: str
+
+
 class SummaryCreate(CamelModel):
     """POST /api/summaries body: { transcript?, summaryText }
     transcript is optional (spec) — the frontend may discard the raw speech."""

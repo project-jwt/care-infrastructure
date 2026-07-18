@@ -14,8 +14,10 @@
 // Every row is keyed by linkId (the primary↔contact link), not the contact's
 // user id — the contract's PATCH/DELETE take the linkId.
 //
-// Rendered from App's VIEWS map, so props are { user, onNavigate } — neither
-// is needed here (the token scopes every request to the logged-in user).
+// Rendered from App's VIEWS map, so props are { user, onNavigate } — only
+// onNavigate('home') is used, to back the list out to the home screen
+// (BottomNav has no Home item — the wireframe caps it at 3). The token
+// scopes every request to the logged-in user.
 
 import { useEffect, useState } from 'react';
 import {
@@ -27,7 +29,7 @@ import {
 import { displayName } from '../utils';
 import './TrustedContactsList.css';
 
-export default function TrustedContactsList() {
+export default function TrustedContactsList({ onNavigate }) {
   const [items, setItems] = useState(null); // null = still loading
   const [loadError, setLoadError] = useState(null);
 
@@ -155,6 +157,14 @@ export default function TrustedContactsList() {
   if (mode === 'list') {
     return (
       <main className="trusted-contacts">
+        <button
+          type="button"
+          className="trusted-contacts__back"
+          onClick={() => onNavigate('home')}
+          disabled={isBusy}
+        >
+          &larr; Home
+        </button>
         <h1 className="trusted-contacts__heading">Your trusted contacts</h1>
 
         {items === null && !loadError && (

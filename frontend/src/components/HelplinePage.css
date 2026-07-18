@@ -14,6 +14,17 @@
   text-align: center;
 }
 
+.helpline-page__back {
+  align-self: flex-start;
+  min-height: 48px; /* accessibility: minimum touch target */
+  padding: 0.5rem 1rem;
+  font-size: 1.125rem;
+  background: none;
+  border: none;
+  color: #1a5276;
+  cursor: pointer;
+}
+
 .helpline-page__heading {
   font-size: 1.75rem;
   margin: 0;
@@ -113,6 +124,7 @@
   text-decoration: none;
 }
 
+.helpline-page__back:focus-visible,
 .helpline-page__retry:focus-visible,
 .helpline-page__call:focus-visible {
   outline: 3px solid #1a5276;

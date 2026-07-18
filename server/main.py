@@ -87,6 +87,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
+
+def _resolve_static_file(dist: Path, full_path: str) -> Path | None:
+    """The file under `dist` to serve for `full_path`, or None to fall back to
+    index.html. Returns None for anything that isn't a real file OR that escapes
+    `dist` via `..` — without that containment check a request decoded to
+    "../../server/.env" would read arbitrary files (path traversal).
+    """
+    dist = dist.resolve()
+    candidate = (dist / full_path).resolve()  # .resolve() collapses any ../
+    if full_path and candidate.is_file() and candidate.is_relative_to(dist):
+        return candidate
+    return None
+
+
 if FRONTEND_DIST.is_dir():
     # Hashed build assets (JS/CSS bundles) served as plain files.
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
@@ -99,9 +113,10 @@ if FRONTEND_DIST.is_dir():
         # must stay a JSON 404, not a 200 with HTML.
         if full_path == "api" or full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not found")
-        # Real files at the dist root (favicon, manifest...) serve as-is.
-        candidate = FRONTEND_DIST / full_path
-        if full_path and candidate.is_file():
-            return FileResponse(candidate)
+        # Real files at the dist root (favicon, manifest...) serve as-is — but
+        # only if they're genuinely inside dist (see _resolve_static_file).
+        target = _resolve_static_file(FRONTEND_DIST, full_path)
+        if target is not None:
+            return FileResponse(target)
         # Everything else is a UI path -> the React app decides what to show.
         return FileResponse(FRONTEND_DIST / "index.html")

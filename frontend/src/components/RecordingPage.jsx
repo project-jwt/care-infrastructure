@@ -7,6 +7,14 @@
 // input — and the answers are sent back with the transcript until the AI
 // returns a finished summary, which is handed up through onContinue.
 //
+// Two ways to speak, chosen per device (see inputMode below):
+//   'live'   — the browser's Web Speech API (desktop Chrome, Android): the
+//              words stream in as you talk, free and instant.
+//   'record' — record the mic and transcribe server-side (iOS, where the Web
+//              Speech API is unreliable/absent): you speak, then the words
+//              appear once the recording is transcribed.
+//   'type'   — no working mic path: the textarea is the only input.
+//
 // Props:
 //   onContinue({ transcript, summaryText }) — required; called when the AI
 //                                             summary is ready (review step).
@@ -14,6 +22,7 @@
 
 import { useState } from 'react';
 import useSpeechRecognition from '../hooks/useSpeechRecognition';
+import useAudioTranscription from '../hooks/useAudioTranscription';
 import { draftSummary } from '../adapters/summaries-adapters';
 import './RecordingPage.css';
 
@@ -32,31 +41,42 @@ export default function RecordingPage({ onContinue, onBack }) {
   const [isDrafting, setIsDrafting] = useState(false); // waiting on the AI
   const [draftError, setDraftError] = useState(null);
 
-  const { isSupported, isListening, interimText, micDenied, error, start, stop } =
-    useSpeechRecognition();
+  // Two input engines; which one this device uses is decided below.
+  const speech = useSpeechRecognition();
+  const audio = useAudioTranscription();
 
-  // Fallback mode kicks in when the browser lacks the API (e.g. Firefox) or
-  // the user blocked the microphone — typing takes over, flow never blocks.
-  const speechAvailable = isSupported && !micDenied;
+  // Prefer the live Web Speech API where it works. Only fall to recording when
+  // it doesn't (iOS) — that keeps the free, instant path on the browsers that
+  // support it and spends a transcription call only where it's actually needed.
+  const speechLive = speech.isSupported && !speech.micDenied;
+  const canRecord = !speechLive && audio.isSupported && !audio.micDenied;
+  const inputMode = speechLive ? 'live' : canRecord ? 'record' : 'type';
+
+  const isCapturing = speech.isListening || audio.isRecording; // mic is hot
+  const isTranscribing = audio.isTranscribing; // clip uploaded, words pending
 
   // The same textarea serves both steps — it edits the transcript while
   // capturing and the current answer while clarifying.
   const currentText = step === 'capture' ? transcript : answerText;
   const setCurrentText = step === 'capture' ? setTranscript : setAnswerText;
 
-  const canContinue = !isListening && !isDrafting && currentText.trim().length > 0;
+  const canContinue =
+    !isCapturing && !isTranscribing && !isDrafting && currentText.trim().length > 0;
 
-  // One button, two jobs: start when idle, stop when listening. Each
-  // finalized phrase is APPENDED (with a space) rather than replacing the
-  // text, so pressing Speak again adds to what's already there —
-  // continuous: false ends a session after every pause.
-  function handleSpeakClick() {
-    if (isListening) {
-      stop();
-    } else {
-      start((finalText) => {
-        setCurrentText((t) => (t ? `${t} ` : '') + finalText);
-      });
+  // Append (with a space) rather than replace, so each spoken phrase adds to
+  // what's already there.
+  const appendText = (finalText) =>
+    setCurrentText((t) => (t ? `${t} ` : '') + finalText);
+
+  // The one primary mic action: start when idle, stop when active. Routes to
+  // whichever engine this device is using.
+  function handleMicClick() {
+    if (inputMode === 'live') {
+      if (speech.isListening) speech.stop();
+      else speech.start(appendText);
+    } else if (inputMode === 'record') {
+      if (audio.isRecording) audio.stop(appendText);
+      else audio.start();
     }
   }
 
@@ -105,19 +125,29 @@ export default function RecordingPage({ onContinue, onBack }) {
     }
   }
 
-  // While listening, show committed text + the live interim guess so words
-  // appear as they're spoken. When idle, show just the committed text.
-  const displayedText = isListening
-    ? currentText + (interimText ? `${currentText ? ' ' : ''}${interimText}` : '')
-    : currentText;
+  // In live mode, show committed text + the live interim guess so words appear
+  // as they're spoken. Recording mode has no interim stream — the words arrive
+  // all at once after transcription — so it just shows the committed text.
+  const displayedText =
+    speech.isListening && speech.interimText
+      ? `${currentText}${currentText ? ' ' : ''}${speech.interimText}`
+      : currentText;
 
-  // Status line under the Speak button (aria-live announces it to
-  // screen readers without stealing focus).
+  // Status line under the mic button (aria-live announces it to screen readers
+  // without stealing focus).
   let status = '';
   if (isDrafting) status = 'One moment — putting your words together…';
-  else if (isListening) status = 'Listening…';
+  else if (isTranscribing) status = 'Turning your recording into words…';
+  else if (speech.isListening) status = 'Listening…';
+  else if (audio.isRecording) status = 'Recording… press Stop when you finish.';
   else if (draftError) status = draftError;
-  else if (error) status = error;
+  else if (speech.error) status = speech.error;
+  else if (audio.error) status = audio.error;
+
+  // Mic button copy differs per engine: 'Speak' streams live; 'Record' captures
+  // then transcribes on Stop.
+  const micIdleLabel = inputMode === 'record' ? 'Record' : 'Speak';
+  const busy = isDrafting || isTranscribing;
 
   return (
     <main className="recording-page">
@@ -136,7 +166,7 @@ export default function RecordingPage({ onContinue, onBack }) {
         </>
       )}
 
-      {speechAvailable ? (
+      {inputMode !== 'type' ? (
         <>
           <p className="recording-page__hint">
             Press the button and speak. You can fix the words after.
@@ -144,21 +174,21 @@ export default function RecordingPage({ onContinue, onBack }) {
           {/* The one primary action on this screen (design rules). */}
           <button
             type="button"
-            className={`recording-page__speak${isListening ? ' recording-page__speak--listening' : ''}`}
-            onClick={handleSpeakClick}
-            aria-pressed={isListening}
-            disabled={isDrafting}
+            className={`recording-page__speak${isCapturing ? ' recording-page__speak--listening' : ''}`}
+            onClick={handleMicClick}
+            aria-pressed={isCapturing}
+            disabled={busy}
           >
             <span className="recording-page__speak-icon" aria-hidden="true">
-              {isListening ? '■' : '🎙'}
+              {isCapturing ? '■' : '🎙'}
             </span>
-            {isListening ? 'Stop' : 'Speak'}
+            {isCapturing ? 'Stop' : micIdleLabel}
           </button>
         </>
       ) : (
         // Plain-language fallback notice — calm, no jargon, no blame.
         <p className="recording-page__fallback-notice">
-          {micDenied
+          {speech.micDenied || audio.micDenied
             ? "We don't have permission to use your microphone."
             : "Talking isn't available on this browser."}{' '}
           No problem &mdash; you can type instead. Tap the box below and tell us
@@ -172,7 +202,7 @@ export default function RecordingPage({ onContinue, onBack }) {
 
       {/* The textarea IS the edit surface — words stream in live while
           listening (read-only so incoming results can't clobber an edit),
-          then it becomes fully editable the moment recording stops. */}
+          then it becomes fully editable the moment capture stops. */}
       <label className="recording-page__label" htmlFor="transcript">
         {step === 'capture' ? 'Your words:' : 'Your answer:'}
       </label>
@@ -181,12 +211,12 @@ export default function RecordingPage({ onContinue, onBack }) {
         className="recording-page__transcript"
         value={displayedText}
         onChange={(e) => setCurrentText(e.target.value)}
-        readOnly={isListening || isDrafting}
+        readOnly={isCapturing || isTranscribing || isDrafting}
         rows={8}
         placeholder={
-          speechAvailable
-            ? 'Your words will show up here.'
-            : 'Type what happened here.'
+          inputMode === 'type'
+            ? 'Type what happened here.'
+            : 'Your words will show up here.'
         }
       />
 
