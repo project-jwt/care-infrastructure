@@ -66,6 +66,18 @@ input {
   text-align: center;
 }
 
+/* Back to the landing page — only shown when reached from the landing CTA. */
+.auth-back {
+  display: block;
+  margin-bottom: 8px;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  color: #1a5276;
+  font-weight: 600;
+  text-align: left;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -96,7 +108,7 @@ input {
 }
 
 .role-picker button.selected {
-  border: 3px solid #1a73e8;
+  border: 3px solid #1a5276;
   font-weight: bold;
 }
 

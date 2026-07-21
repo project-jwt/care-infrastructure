@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { getToken } from './adapters/fetch-helpers';
 import { logout } from './adapters/auth-adapters';
 import { getMe } from './adapters/users-adapters';
+import LandingPage from './components/LandingPage';
 import LoginRegisterPage from './components/LoginRegisterPage';
 import BottomNav from './components/BottomNav';
 import PrimaryHome from './components/PrimaryHome';
@@ -35,6 +36,10 @@ export default function App() {
   const [user, setUser] = useState(null); // null = logged out
   const [checking, setChecking] = useState(true); // true while validating a stored token
   const [view, setView] = useState('home');
+  // Pre-auth screen: logged-out visitors start on the marketing landing page,
+  // then a CTA reveals the login/register form in the requested mode.
+  const [authView, setAuthView] = useState('landing'); // 'landing' | 'auth'
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
   // Carried from the recording step to the review step (speak → review flow):
   // the raw transcript and the AI-drafted summary the user will edit/approve.
   const [transcript, setTranscript] = useState('');
@@ -90,7 +95,23 @@ export default function App() {
   // Don't flash the login page while we're still checking the stored token.
   if (checking) return <div className="app-loading">Loading…</div>;
 
-  if (!user) return <LoginRegisterPage onAuth={handleAuth} />;
+  if (!user) {
+    if (authView === 'landing') {
+      return (
+        <LandingPage
+          onGetStarted={() => { setAuthMode('register'); setAuthView('auth'); }}
+          onLogin={() => { setAuthMode('login'); setAuthView('auth'); }}
+        />
+      );
+    }
+    return (
+      <LoginRegisterPage
+        onAuth={handleAuth}
+        initialMode={authMode}
+        onBack={() => setAuthView('landing')}
+      />
+    );
+  }
 
   const isPrimary = user.role === 'primary';
   const CurrentView = VIEWS[view] ?? PrimaryHome;
