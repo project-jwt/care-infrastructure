@@ -6,8 +6,8 @@
 import { useState } from 'react';
 import { login, register } from '../adapters/auth-adapters';
 
-export default function LoginRegisterPage({ onAuth }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+export default function LoginRegisterPage({ onAuth, initialMode = 'login', onBack }) {
+  const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -35,6 +35,11 @@ export default function LoginRegisterPage({ onAuth }) {
 
   return (
     <main className="auth-page">
+      {onBack && (
+        <button type="button" className="auth-back" onClick={onBack}>
+          ← Back
+        </button>
+      )}
       <h1>J.W.T</h1>
       <p className="tagline">
         Speak your problem. We&apos;ll turn it into something your family or a
