@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.security import hash_password
+from core.security import hash_password, verify_password
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from models import user_model
 from models.user_model import User
-from schemas.user import SetupOut, UserOut, UserUpdate
+from schemas.user import AccountDelete, SetupOut, UserOut, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -68,3 +68,29 @@ async def complete_setup(
     onboarding tutorial (spec MVP story 6).
     """
     return await user_model.mark_setup_complete(session, user.id)
+
+
+@router.delete("/me", status_code=204)
+async def delete_me(
+    body: AccountDelete,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """DELETE /api/users/me  { password } -> 204 No Content
+
+    Irreversible. Three protections stack here:
+      1. get_current_user proves WHO you are (401 without a valid token).
+      2. The route is /me and only ever touches `user` — no id is accepted,
+         so you can only delete your OWN account (no horizontal escalation).
+      3. Step-up re-auth: the password is re-checked against the stored hash,
+         so a valid token alone can't nuke the account (shared-device case).
+    On success the DB's ON DELETE CASCADE removes the account's summaries,
+    delivery records, and contact links along with the row.
+    """
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=403, detail="Incorrect password")
+
+    await user_model.delete(session, user.id)
+    # 204: no body. The caller's token now references a gone account, so any
+    # further request fails get_current_user's "User not found" 401.
+    return None

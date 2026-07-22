@@ -37,3 +37,14 @@ class SetupOut(CamelModel):
 
     id: int
     has_completed_setup: bool
+
+
+class AccountDelete(CamelModel):
+    """DELETE /api/users/me body: { password }.
+
+    The account password re-supplied as confirmation. Deletion is
+    irreversible, so a valid token alone isn't enough — the handler verifies
+    this against the stored hash (step-up re-auth) before removing anything,
+    which defends the shared/unlocked-device case."""
+
+    password: str
