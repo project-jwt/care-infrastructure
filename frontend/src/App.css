@@ -78,6 +78,12 @@ input {
   text-align: left;
 }
 
+/* Match the focus care taken on the landing CTAs. */
+.auth-back:focus-visible {
+  outline: 3px solid #1a5276;
+  outline-offset: 3px;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;

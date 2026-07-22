@@ -90,6 +90,7 @@ export default function App() {
     logout(); // clears the stored token
     setUser(null);
     setView('home');
+    setAuthView('landing'); // logging out returns to the landing page, not the bare login form
   };
 
   // Don't flash the login page while we're still checking the stored token.
