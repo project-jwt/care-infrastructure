@@ -61,6 +61,98 @@ async def test_delete_me_requires_authentication(client):
     assert resp.status_code == 401
 
 
+# ── PATCH step-up re-auth (email / password require current password) ─────────
+
+
+async def test_patch_name_only_needs_no_current_password(client, sessions):
+    async with sessions() as s:
+        user = await _user(s, email="name@example.com")
+        await s.commit()
+
+    resp = await client.patch(
+        "/api/users/me", json={"fullName": "New Name"}, headers=_auth(user)
+    )
+    assert resp.status_code == 200
+    assert resp.json()["fullName"] == "New Name"
+
+
+async def test_patch_email_without_current_password_is_403(client, sessions):
+    async with sessions() as s:
+        user = await _user(s, email="before@example.com")
+        await s.commit()
+
+    resp = await client.patch(
+        "/api/users/me", json={"email": "after@example.com"}, headers=_auth(user)
+    )
+    assert resp.status_code == 403
+    assert resp.json() == {"message": "Current password is incorrect"}
+
+    # Email is unchanged.
+    me = await client.get("/api/users/me", headers=_auth(user))
+    assert me.json()["email"] == "before@example.com"
+
+
+async def test_patch_email_with_wrong_current_password_is_403(client, sessions):
+    async with sessions() as s:
+        user = await _user(s, email="before2@example.com")
+        await s.commit()
+
+    resp = await client.patch(
+        "/api/users/me",
+        json={"email": "after2@example.com", "currentPassword": "wrong"},
+        headers=_auth(user),
+    )
+    assert resp.status_code == 403
+
+
+async def test_patch_email_with_correct_current_password_succeeds(client, sessions):
+    async with sessions() as s:
+        user = await _user(s, email="old@example.com")
+        await s.commit()
+
+    resp = await client.patch(
+        "/api/users/me",
+        json={"email": "new@example.com", "currentPassword": PASSWORD},
+        headers=_auth(user),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["email"] == "new@example.com"
+
+
+async def test_patch_password_without_current_password_is_403(client, sessions):
+    async with sessions() as s:
+        user = await _user(s, email="pw@example.com")
+        await s.commit()
+
+    resp = await client.patch(
+        "/api/users/me", json={"password": "brand-new-pass"}, headers=_auth(user)
+    )
+    assert resp.status_code == 403
+
+
+async def test_patch_password_with_correct_current_password_rehashes(client, sessions):
+    async with sessions() as s:
+        user = await _user(s, email="pw2@example.com")
+        await s.commit()
+
+    resp = await client.patch(
+        "/api/users/me",
+        json={"password": "brand-new-pass", "currentPassword": PASSWORD},
+        headers=_auth(user),
+    )
+    assert resp.status_code == 200
+
+    # The new password now authenticates via login; the old one no longer does.
+    ok = await client.post(
+        "/api/auth/login", json={"email": "pw2@example.com", "password": "brand-new-pass"}
+    )
+    assert ok.status_code == 200
+    stale = await client.post(
+        "/api/auth/login", json={"email": "pw2@example.com", "password": PASSWORD}
+    )
+    assert stale.status_code == 401
+
+
 async def test_delete_me_success_removes_account_and_invalidates_token(client, sessions):
     async with sessions() as s:
         user = await _user(s, email="gone@example.com")
@@ -112,6 +204,41 @@ async def test_delete_cascades_to_owned_rows(session):
     assert await count(TrustedContactLink) == 0
     # The contact account itself is NOT theirs to delete — it survives.
     assert await session.get(User, contact.id) is not None
+
+
+async def test_contact_deletion_preserves_receipt_as_deleted_user(session):
+    # When the RECIPIENT deletes their account, the sender's delivery record
+    # must survive — contact_id set NULL ("sent to a deleted user") — while the
+    # trusted-contact link (who can I send to now) is removed.
+    await session.execute(text("PRAGMA foreign_keys=ON"))
+
+    owner = await _user(session, email="sender@example.com", role="primary")
+    contact = await _user(session, email="leaving@example.com", role="contact")
+
+    summary = Summary(user_id=owner.id, summary_text="a summary", transcript="raw")
+    session.add(summary)
+    await session.flush()
+    session.add(SummaryRecipient(summary_id=summary.id, contact_id=contact.id))
+    session.add(TrustedContactLink(owner_id=owner.id, contact_id=contact.id))
+    await session.commit()
+
+    removed = await user_model.delete(session, contact.id)
+    assert removed is True
+
+    session.expunge_all()
+
+    async def count(model):
+        result = await session.execute(select(func.count()).select_from(model))
+        return result.scalar()
+
+    # The sender's summary is untouched, and the receipt survives with its
+    # recipient nulled out — the sender still knows a send happened.
+    assert await session.get(Summary, summary.id) is not None
+    assert await count(SummaryRecipient) == 1
+    result = await session.execute(select(SummaryRecipient.contact_id))
+    assert result.scalar() is None
+    # The deleted user drops off the sender's trusted-contacts list, though.
+    assert await count(TrustedContactLink) == 0
 
 
 async def test_delete_missing_user_returns_false(session):

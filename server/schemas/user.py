@@ -21,7 +21,7 @@ class UserOut(CamelModel):
 
 
 class UserUpdate(CamelModel):
-    """PATCH /api/users/me body: { fullName?, email?, password? }
+    """PATCH /api/users/me body: { fullName?, email?, password?, currentPassword? }
     Every field optional — only what the client sends gets updated
     (the route uses model_dump(exclude_unset=True) to tell)."""
 
@@ -30,6 +30,10 @@ class UserUpdate(CamelModel):
     # Same 8-char floor as RegisterIn — rules apply wherever passwords are SET
     # (never on LoginIn, which must accept whatever was registered).
     password: str | None = Field(default=None, min_length=8)
+    # Step-up re-auth: the CURRENT password, required by the route when email
+    # or password is changing. Not a column and no length rule — it's verified
+    # against the stored hash, not stored.
+    current_password: str | None = None
 
 
 class SetupOut(CamelModel):

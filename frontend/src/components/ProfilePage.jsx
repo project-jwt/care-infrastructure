@@ -19,14 +19,21 @@ export default function ProfilePage({ user, onUpdated, onBack, onDeleted }) {
   // --- Update: name + email ---
   const [fullName, setFullName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
+  // Current password, required only when the email is actually changing —
+  // step-up re-auth, same guard the backend enforces.
+  const [detailsPassword, setDetailsPassword] = useState('');
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsStatus, setDetailsStatus] = useState(null); // { ok, message }
 
   // --- Update: password (separate form; never prefilled) ---
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState(null);
+
+  // The email field is dirty -> a credential change, so re-auth is required.
+  const emailChanging = email !== user.email;
 
   // --- Delete: two-step, password-confirmed ---
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -46,24 +53,38 @@ export default function ProfilePage({ user, onUpdated, onBack, onDeleted }) {
       return;
     }
 
+    // Changing the email needs the current password (backend enforces it too).
+    if (emailChanging) {
+      if (!detailsPassword) {
+        setDetailsStatus({ ok: false, message: 'Enter your current password to change your email.' });
+        return;
+      }
+      fields.currentPassword = detailsPassword;
+    }
+
     setSavingDetails(true);
     setDetailsStatus(null);
     const { data, error } = await updateMe(fields);
     setSavingDetails(false);
 
     if (error) {
-      // e.g. 409 "Email already registered"
+      // e.g. 409 "Email already registered" or 403 "Current password is incorrect"
       setDetailsStatus({ ok: false, message: error.message });
       return;
     }
     onUpdated(data); // lift the fresh user up so App stays in sync
+    setDetailsPassword('');
     setDetailsStatus({ ok: true, message: 'Saved.' });
   };
 
   const handlePasswordSave = async (event) => {
     event.preventDefault();
+    if (!currentPassword) {
+      setPasswordStatus({ ok: false, message: 'Enter your current password.' });
+      return;
+    }
     if (newPassword.length < 8) {
-      setPasswordStatus({ ok: false, message: 'Password must be at least 8 characters.' });
+      setPasswordStatus({ ok: false, message: 'New password must be at least 8 characters.' });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -73,13 +94,15 @@ export default function ProfilePage({ user, onUpdated, onBack, onDeleted }) {
 
     setSavingPassword(true);
     setPasswordStatus(null);
-    const { error } = await updateMe({ password: newPassword });
+    const { error } = await updateMe({ password: newPassword, currentPassword });
     setSavingPassword(false);
 
     if (error) {
+      // 403 "Current password is incorrect" is the expected wrong-password case.
       setPasswordStatus({ ok: false, message: error.message });
       return;
     }
+    setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setPasswordStatus({ ok: true, message: 'Password updated.' });
@@ -153,6 +176,21 @@ export default function ProfilePage({ user, onUpdated, onBack, onDeleted }) {
               required
             />
           </label>
+          {/* Changing the email is a credential change — confirm with the
+              current password. Only shown once the email is actually edited. */}
+          {emailChanging && (
+            <label className="profile__label">
+              Current password
+              <input
+                className="profile__input"
+                type="password"
+                value={detailsPassword}
+                onChange={(e) => setDetailsPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
+          )}
           <button type="submit" className="profile__save" disabled={savingDetails}>
             {savingDetails ? 'Saving…' : 'Save changes'}
           </button>
@@ -171,6 +209,17 @@ export default function ProfilePage({ user, onUpdated, onBack, onDeleted }) {
       <section className="profile__card" aria-labelledby="profile-pw-h">
         <h2 id="profile-pw-h" className="profile__card-title">Change password</h2>
         <form className="profile__form" onSubmit={handlePasswordSave}>
+          <label className="profile__label">
+            Current password
+            <input
+              className="profile__input"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
           <label className="profile__label">
             New password
             <input

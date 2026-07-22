@@ -2,8 +2,9 @@
 #
 # Same shape as core/ai.py: configure the SDK once at import, expose one
 # function, raise on failure and let the router translate that into a 502.
-# Sender stays onboarding@resend.dev (Resend's sandbox address) until a real
-# domain is verified.
+# The sender address comes from settings.email_sender: in production it's an
+# address at our Resend-verified domain (projectjwt.marcylab.us); locally it
+# falls back to Resend's sandbox sender.
 
 import asyncio
 import html
@@ -15,7 +16,7 @@ from config import settings
 
 resend.api_key = settings.resend_api_key
 
-SENDER = "J.W.T <onboarding@resend.dev>"
+SENDER = settings.email_sender
 
 
 class EmailSendError(Exception):

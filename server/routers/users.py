@@ -33,10 +33,23 @@ async def update_me(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),  # same session get_current_user used (per-request cache)
 ):
-    """PATCH /api/users/me  { fullName?, email?, password? } -> 200 updated user."""
+    """PATCH /api/users/me  { fullName?, email?, password?, currentPassword? } -> 200 updated user."""
     # exclude_unset: only fields the client actually sent — so PATCHing just
     # fullName doesn't stomp email with None.
     fields = body.model_dump(exclude_unset=True)
+
+    # currentPassword isn't a column — pull it out before it reaches the model.
+    current_password = fields.pop("current_password", None)
+
+    # Step-up re-auth: changing the credentials that let you take over an
+    # account (email, password) requires re-entering the current password, so
+    # a valid token alone can't do it on a shared/unlocked device. Editing
+    # only fullName stays token-only. Mirrors the delete flow's guard.
+    if "email" in fields or "password" in fields:
+        if current_password is None or not verify_password(
+            current_password, user.password_hash
+        ):
+            raise HTTPException(status_code=403, detail="Current password is incorrect")
 
     # Raw password -> hash at the boundary, same as register. The model only
     # ever sees password_hash.

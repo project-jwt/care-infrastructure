@@ -54,13 +54,15 @@ class SummaryRecipient(Base):
     # Python attribute `id`, DB column `recipient_id` — same trick as above.
     id: Mapped[int] = mapped_column("recipient_id", primary_key=True)
 
-    # CASCADE on both ends: deleting the summary (or either account) also
-    # removes the delivery records that point at it.
+    # summary_id CASCADEs: if the summary itself is deleted, its delivery
+    # records go with it. contact_id, though, is SET NULL — a receipt must
+    # SURVIVE the recipient deleting their account so the sender keeps the
+    # record, now reading as "sent to a deleted user" (contact_id IS NULL).
     summary_id: Mapped[int] = mapped_column(
         ForeignKey("summaries.summary_id", ondelete="CASCADE")
     )
-    contact_id: Mapped[int] = mapped_column(
-        ForeignKey("users.user_id", ondelete="CASCADE")
+    contact_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.user_id", ondelete="SET NULL")
     )
 
     sent_at: Mapped[datetime] = mapped_column(
