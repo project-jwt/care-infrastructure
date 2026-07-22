@@ -21,6 +21,7 @@ from models.user_model import User
 from schemas.summary import (
     DraftIn,
     DraftOut,
+    SendFailure,
     SendIn,
     SendOut,
     SentTo,
@@ -164,15 +165,19 @@ async def send_summary(
     user: User = Depends(require_primary),
     session: AsyncSession = Depends(get_db),
 ):
-    """POST /api/summaries/:id/send  { contactIds } -> { summaryId, sentTo }
+    """POST /api/summaries/:id/send  { contactIds } -> { summaryId, sentTo, failed }
 
     Order matters here — validate EVERYTHING, then email, then record:
       1. 404 unless the summary exists and is the caller's (owner-scoped).
       2. 403 if ANY contactId isn't on the caller's trusted list — checked
          before a single email goes out, so a bad id can't cause a partial send.
-      3. Email every contact; any Resend failure -> 502 and, because
-         record_send hasn't run yet, nothing lands in summary_recipients
-         (acceptance criterion: failed sends record nothing).
+      3. Email every contact, tolerating per-recipient failures: a Resend
+         rejection for one contact must not hide that others DID get the
+         email (the old first-failure-aborts version left users guessing who
+         received it). Successes are recorded in summary_recipients; failures
+         come back in `failed` so the client can retry exactly those.
+      4. 502 only when NOTHING went out — every email failed, nothing is
+         recorded, and a plain retry is genuinely safe.
     """
     summary = await summary_model.find_by_id(session, summary_id, user.id)
     if summary is None:
@@ -197,24 +202,39 @@ async def send_summary(
             )
         recipients.append(recipient)
 
-    try:
-        for recipient in recipients:
+    # One attempt per recipient, never aborting early: with a per-recipient
+    # try/except, one rejected address can't mask deliveries that already
+    # happened. Only EmailSendError (the provider's failures) is tolerated;
+    # a bug of ours propagates as a 500 instead of masquerading as a Resend
+    # outage.
+    sent_ids: list[int] = []
+    failed_ids: list[int] = []
+    for recipient in recipients:
+        try:
             await send_summary_email(
                 recipient.email, summary.summary_text, from_name=user.full_name
             )
-    except EmailSendError:
-        # Resend outage/quota/network — same treatment as /draft's Gemini
-        # failure: log the real error, send a generic 502, record nothing.
-        # Only the provider's failures land here; a bug of ours propagates
-        # as a 500 instead of masquerading as a Resend outage.
-        logger.exception("send_summary_email failed")
+        except EmailSendError:
+            # Same treatment as /draft's Gemini failure: log the real error
+            # (naming the recipient so a pattern of one bad address is
+            # visible), keep the response generic.
+            logger.exception(
+                "send_summary_email failed for contact %s", recipient.id
+            )
+            failed_ids.append(recipient.id)
+        else:
+            sent_ids.append(recipient.id)
+
+    if not sent_ids:
+        # Every email failed — a full outage, not a partial send. Nothing is
+        # recorded, so the client can safely retry the whole request.
         raise HTTPException(
             status_code=502,
             detail="Could not send the summary right now — please try again",
         )
 
     try:
-        rows = await summary_model.record_send(session, summary_id, contact_ids)
+        rows = await summary_model.record_send(session, summary_id, sent_ids)
     except IntegrityError:
         # Vanishingly narrow race: a contact account (or the summary) deleted
         # between validation above and this insert trips the FK. The emails
@@ -228,4 +248,5 @@ async def send_summary(
     return SendOut(
         summary_id=summary_id,
         sent_to=[SentTo(contact_id=row.contact_id, sent_at=row.sent_at) for row in rows],
+        failed=[SendFailure(contact_id=contact_id) for contact_id in failed_ids],
     )
