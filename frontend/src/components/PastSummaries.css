@@ -118,6 +118,52 @@
   color: #1a5276;
 }
 
+/* --- Sent to (delivery receipt) --- */
+
+.past-summaries__sent-to {
+  width: 100%;
+  text-align: left;
+}
+
+.past-summaries__sent-to-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: #1c2833;
+}
+
+.past-summaries__recipients {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.past-summaries__recipient {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+}
+
+.past-summaries__recipient-name {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1c2833;
+  overflow-wrap: anywhere;
+}
+
+.past-summaries__recipient-date {
+  flex-shrink: 0;
+  font-size: 1rem;
+  color: #1a5276;
+}
+
 .past-summaries__label {
   align-self: flex-start;
   font-size: 1.25rem;

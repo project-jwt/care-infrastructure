@@ -142,6 +142,29 @@ async def mark_setup_complete(session: AsyncSession, user_id: int) -> User | Non
     return await update(session, user_id, has_completed_setup=True)
 
 
+async def delete(session: AsyncSession, user_id: int) -> bool:
+    """Delete a user by primary key (DELETE /api/users/me). Returns True if a
+    row was removed, False if no such user.
+
+    session.delete(user) emits DELETE FROM users WHERE user_id = $1, and the
+    FKs pointing at users handle the fallout:
+      - summaries.user_id and both ends of trusted_contact_links CASCADE, so
+        the account's own summaries and every contact link it's part of go too;
+      - summary_recipients.contact_id is SET NULL instead — a delivery record
+        addressed to a contact who deletes their account SURVIVES (the sender
+        keeps the receipt, now reading "sent to a deleted user"). Those rows
+        still disappear when the summary they belong to is deleted, via
+        summary_recipients.summary_id's CASCADE.
+    No manual cleanup here either way.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        return False
+    await session.delete(user)
+    await session.commit()
+    return True
+
+
 async def validate_password(session: AsyncSession, email: str, password: str) -> User | None:
     """The login check: find the account by email, compare the attempt against
     its stored bcrypt hash. Returns the User on success, None on ANY failure.

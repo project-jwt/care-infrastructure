@@ -54,13 +54,15 @@ class SummaryRecipient(Base):
     # Python attribute `id`, DB column `recipient_id` — same trick as above.
     id: Mapped[int] = mapped_column("recipient_id", primary_key=True)
 
-    # CASCADE on both ends: deleting the summary (or either account) also
-    # removes the delivery records that point at it.
+    # summary_id CASCADEs: if the summary itself is deleted, its delivery
+    # records go with it. contact_id, though, is SET NULL — a receipt must
+    # SURVIVE the recipient deleting their account so the sender keeps the
+    # record, now reading as "sent to a deleted user" (contact_id IS NULL).
     summary_id: Mapped[int] = mapped_column(
         ForeignKey("summaries.summary_id", ondelete="CASCADE")
     )
-    contact_id: Mapped[int] = mapped_column(
-        ForeignKey("users.user_id", ondelete="CASCADE")
+    contact_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.user_id", ondelete="SET NULL")
     )
 
     sent_at: Mapped[datetime] = mapped_column(
@@ -205,5 +207,34 @@ async def list_received_for_contact(
         # a single sent_at, so id breaks the tie and keeps the order stable
         # between refreshes.
         .order_by(SummaryRecipient.sent_at.desc(), SummaryRecipient.id.desc())
+    )
+    return list(result.all())
+
+
+async def list_recipients_for_summary(
+    session: AsyncSession, summary_id: int
+) -> list[Row]:
+    """Everyone a summary was sent to, oldest send first — the sender's
+    delivery receipt (GET /api/summaries/:id/recipients).
+
+    outerjoin (LEFT JOIN) to users so a recipient who has since deleted their
+    account still returns a row: contact_id and full_name come back NULL (the
+    receipt was preserved by ON DELETE SET NULL), which the frontend shows as
+    "Deleted user". Only id + name are selected — the full users row
+    (password_hash) never enters the query, same as list_received_for_contact.
+
+    Scoping: the CALLER checks the summary belongs to the primary (the router
+    does, via find_by_id) before calling this — here we filter only by
+    summary_id.
+    """
+    result = await session.execute(
+        select(
+            SummaryRecipient.contact_id,
+            User.full_name,
+            SummaryRecipient.sent_at,
+        )
+        .outerjoin(User, User.id == SummaryRecipient.contact_id)
+        .where(SummaryRecipient.summary_id == summary_id)
+        .order_by(SummaryRecipient.sent_at.asc(), SummaryRecipient.id.asc())
     )
     return list(result.all())

@@ -1,0 +1,201 @@
+/* ProfilePage styles — same conventions as HelplinePage/PrimaryHome: deep-blue
+   #1a5276 accent, #1c2833 headings, #2e4053 body, #85929e outlines, 0.5rem
+   radius, a 34rem centered column, 48px+ touch targets, visible focus rings.
+   App.css already sets the 48px/18px button-and-input floor. Mobile-first. */
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+}
+
+.profile__back {
+  align-self: flex-start;
+  min-height: 48px;
+  padding: 0.5rem 1rem;
+  font-size: 1.125rem;
+  background: none;
+  border: none;
+  color: #1a5276;
+  cursor: pointer;
+}
+
+.profile__heading {
+  font-size: 1.75rem;
+  margin: 0 0 0.5rem;
+  color: #1c2833;
+}
+
+/* --- Cards --- */
+
+.profile__card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  background: #ffffff;
+}
+
+.profile__card--danger {
+  border-color: #922b21;
+}
+
+.profile__card-title {
+  font-size: 1.375rem;
+  margin: 0;
+  color: #1c2833;
+}
+
+/* --- Read: account facts --- */
+
+.profile__facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.profile__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.profile__fact dt {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #2e4053;
+}
+
+.profile__fact dd {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #1c2833;
+  overflow-wrap: anywhere; /* long emails shouldn't overflow the card */
+}
+
+/* --- Forms --- */
+
+.profile__form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.profile__label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1c2833;
+}
+
+.profile__input {
+  width: 100%;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  font-weight: 400;
+}
+
+/* Filled-blue primary action, same as the app's save/continue buttons. */
+.profile__save {
+  min-height: 56px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  background: #1a5276;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.profile__save:disabled {
+  background: #85929e;
+  cursor: default;
+}
+
+/* Reserve nothing until a status exists, but make it clearly readable. */
+.profile__status {
+  margin: 0;
+  font-size: 1.125rem;
+  color: #1e6b3a; /* success green with enough contrast on white */
+}
+
+.profile__status--error {
+  color: #6e2c00; /* same error tone as HelplinePage */
+}
+
+/* --- Help / replay walkthrough --- */
+
+.profile__help-note {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5;
+  color: #2e4053;
+}
+
+/* --- Danger zone --- */
+
+.profile__danger-note {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5;
+  color: #2e4053;
+}
+
+.profile__danger-btn {
+  min-height: 56px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  background: #922b21;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.profile__danger-btn:disabled {
+  background: #b99;
+  cursor: default;
+}
+
+.profile__cancel {
+  min-height: 56px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: #1c2833;
+  cursor: pointer;
+}
+
+.profile__danger-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.profile__danger-actions > * {
+  flex: 1;
+}
+
+/* --- Focus rings (accessibility) --- */
+
+.profile__back:focus-visible,
+.profile__save:focus-visible,
+.profile__cancel:focus-visible,
+.profile__input:focus-visible {
+  outline: 3px solid #1a5276;
+  outline-offset: 2px;
+}
+
+.profile__danger-btn:focus-visible {
+  outline: 3px solid #922b21;
+  outline-offset: 3px;
+}

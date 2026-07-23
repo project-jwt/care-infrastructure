@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"       # HMAC-SHA256, the standard symmetric JWT alg
     jwt_expire_minutes: int = 60 * 24 * 7  # tokens live 7 days, then the user logs in again
 
+    # The address summaries are sent FROM. In production this MUST be an
+    # address at a Resend-verified domain (projectjwt.marcylab.us), set in
+    # .env / the Render dashboard. Defaults to Resend's sandbox sender so local
+    # dev and CI boot with no extra setup — but the sandbox only delivers to
+    # the account owner, so real recipients need the verified-domain value.
+    email_sender: str = "J.W.T <onboarding@resend.dev>"
+
     # Blank works until the AI-draft route is called — it 502s per request
     # without a key, which is visible enough for a dev-only feature gap.
     gemini_api_key: str = ""

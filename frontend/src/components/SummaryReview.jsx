@@ -49,11 +49,12 @@ export default function SummaryReview({ transcript, summaryText, onSaved, onNavi
 
   return (
     <main className="summary-review">
-      {/* Restarts the speak flow — RecordingPage mounts fresh. */}
+      {/* Restarts the speak flow — 'home' is the speak/record screen, which
+          mounts fresh. */}
       <button
         type="button"
         className="summary-review__back"
-        onClick={() => onNavigate('recording')}
+        onClick={() => onNavigate('home')}
       >
         &larr; Start over
       </button>

@@ -1,75 +1,82 @@
 /* SetupTutorial styles — own file, same conventions as PastSummaries.css /
-   RecordingPage.css: 48px+ touch targets, large readable text, high contrast. */
+   RecordingPage.css: 48px+ touch targets, large readable text, high contrast.
+   A centered modal carousel (no element spotlighting) that dims the page and
+   can sit on top of any screen. */
 
-/* Catches every click/tap so the page underneath (including the highlighted
-   button) is inert while the tour runs. Sits above the fixed .bottom-nav,
-   which has no z-index of its own. */
+/* Full-screen dim + centering. Catches every click/tap so the page underneath
+   is inert while the tour runs. Sits above the fixed .bottom-nav, which has no
+   z-index of its own. */
 .tutorial-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
-}
-
-/* Full-screen dim for the steps that don't point at anything. */
-.tutorial-scrim {
-  position: fixed;
-  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
   background: rgba(0, 0, 0, 0.6);
-}
-
-/* Spotlight ring around the current target. The oversized box-shadow doubles
-   as the page dim, so the target itself stays at full brightness. */
-.tutorial-highlight {
-  position: fixed;
-  pointer-events: none;
-  border: 3px solid #1a73e8;
-  border-radius: 8px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
-  transition: top 0.2s, left 0.2s, width 0.2s, height 0.2s;
+  /* Let the card scroll into view on short/landscape viewports. */
+  overflow-y: auto;
 }
 
 .tutorial-card {
-  position: fixed;
-  left: 16px;
-  right: 16px;
+  position: relative;
+  width: 100%;
   max-width: 420px;
-  margin: 0 auto;
-  z-index: 1001;
   background: #fff;
   color: #111;
   border-radius: 12px;
   padding: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
-.tutorial-card--center {
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-/* Arrow pointing from the card at the highlighted element. --arrow-x is set
-   inline from the measured target so it lands over the button's center. */
-.tutorial-card--below::before,
-.tutorial-card--above::before {
-  content: '';
+/* Dismiss control, top-right of the card. */
+.tutorial-skip {
   position: absolute;
-  left: var(--arrow-x, 50%);
-  margin-left: -12px;
-  border: 12px solid transparent;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  padding: 8px;
+  font-size: 16px;
+  color: #555;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
-.tutorial-card--below::before {
-  bottom: 100%;
-  border-bottom-color: #fff;
+/* Fixed-ratio illustration slot so the card doesn't jump as slides change. */
+.tutorial-media {
+  margin: 8px 0 16px;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #eef1f5;
 }
 
-.tutorial-card--above::before {
-  top: 100%;
-  border-top-color: #fff;
+.tutorial-media__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Placeholder shown until a slide's real image/GIF is added. */
+.tutorial-media__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #7a8290;
+  font-size: 16px;
+  font-style: italic;
 }
 
 .tutorial-title {
   font-size: 22px;
   margin: 0 0 8px;
+  /* Keep clear of the Skip control above. */
+  padding-right: 56px;
 }
 
 .tutorial-body {

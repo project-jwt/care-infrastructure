@@ -77,6 +77,13 @@ export const updateSummary = (id, summaryText) =>
 export const deleteSummary = (id) =>
   handleFetch(`/api/summaries/${id}`, { method: 'DELETE' });
 
+// Who this summary was sent to, oldest send first (the sender's receipt):
+// [{ contactId, fullName, sentAt }]. A recipient who deleted their account
+// comes back with contactId/fullName null (render as "Deleted user"). 404 if
+// the summary isn't the caller's; [] if it was never sent.
+export const getSummaryRecipients = (id) =>
+  handleFetch(`/api/summaries/${id}/recipients`);
+
 // Emails the summary to trusted contacts and records each send. Returns
 // { summaryId, sentTo: [{ contactId, sentAt }] }. Errors: 404 summary not
 // found (or not the caller's), 403 a contactId is not a trusted contact,

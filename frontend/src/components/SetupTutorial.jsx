@@ -1,182 +1,121 @@
-// SetupTutorial — first-login walkthrough (spec §MVP 6). Renders as a fixed
-// overlay on top of the real home screen so the highlight ring and arrows
-// point at the actual buttons, not mockups. App shows it while
-// user.hasCompletedSetup is false; "Get started" calls markSetupComplete()
-// and App flips the flag locally, so it never shows again.
+// SetupTutorial — first-login walkthrough (spec §MVP 6), a self-contained
+// modal carousel. Each slide teaches one part of the app with a short bit of
+// text and an illustration (image/GIF); it does not point at live elements,
+// so it survives layout changes and can run on top of any screen.
 //
-// No Skip/Escape dismissal on purpose: the tour is seven short steps, and a
-// dismissed-but-incomplete state would only re-show it next login anyway.
-// props: onComplete() = App's callback that flips hasCompletedSetup locally.
+// Opened two ways (see App.jsx):
+//   • firstRun — auto-opens once for a primary user who hasn't finished setup.
+//     Skip or Done calls markSetupComplete() so it won't auto-open again.
+//   • replay  — re-opened on demand from Profile. Already complete, so closing
+//     just dismisses it (no redundant PATCH).
+//
+// props:
+//   firstRun  — true on the first-login run (persist completion), false on replay.
+//   onFinish() — App's callback that flips hasCompletedSetup locally (first run)
+//                and/or closes the modal.
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { markSetupComplete } from '../adapters/users-adapters';
 import './SetupTutorial.css';
 
-// Each step highlights one real element (target = CSS selector) or none
-// (target = null → centered card over a full dim). The three flow steps point
-// at the home screen's big shortcut buttons rather than the small nav tabs —
-// the tour teaches the targets the 65+ audience will actually tap. Steps may
-// also carry a label: among the target's matches, the button whose text
-// equals the label wins, so reordering FLOWS can't silently repoint a step.
-const STEPS = [
+// Slides in tour order. `image` is a path under /public/tutorial (served at
+// the site root); a slide with no image is a plain text card. The copy is kept
+// short and literal for the 65+ audience, and names the on-screen labels the
+// user will actually tap (Speak / History / Contacts / Helpline / Profile).
+const SLIDES = [
   {
     id: 'welcome',
-    target: null,
     title: 'Welcome to J.W.T',
-    body: 'This app helps you share how you’re doing with the people who care about you. Let’s take a quick look around.',
+    body: 'This app helps you share how you’re doing with the people who care about you. Here’s a quick look around.',
   },
   {
     id: 'speak',
-    target: '.primary-home__speak',
-    placement: 'below',
-    title: 'Tell us what’s going on',
-    body: 'Tap the big Speak Now button and just talk. The app listens and writes a short summary you can check before sharing.',
+    image: '/tutorial/speak.gif',
+    title: 'Speak is your home screen',
+    body: 'This is the first thing you’ll see. Press the big button and just talk — the app listens and writes down what you say.',
+  },
+  {
+    id: 'review',
+    image: '/tutorial/review.gif',
+    title: 'Check it, then share',
+    body: 'We turn your words into a short summary. Read it over, change anything you like, then choose who to send it to.',
   },
   {
     id: 'history',
-    target: '.primary-home__flow',
-    label: 'Past Summaries',
-    placement: 'above',
+    image: '/tutorial/history.gif',
     title: 'Look back anytime',
-    body: 'Tap Past Summaries to read the updates you’ve shared before.',
+    body: 'Tap History at the bottom to read the updates you’ve shared before.',
   },
   {
     id: 'contacts',
-    target: '.primary-home__flow',
-    label: 'Trusted Contacts',
-    placement: 'above',
+    image: '/tutorial/contacts.gif',
     title: 'Your trusted people',
-    body: 'Tap Trusted Contacts to see the family and friends who receive your updates.',
+    body: 'Tap Contacts to see the family and friends who receive your updates.',
   },
   {
     id: 'helpline',
-    target: '.primary-home__flow',
-    label: 'Helpline',
-    placement: 'above',
+    image: '/tutorial/helpline.gif',
     title: 'Help is always here',
     body: 'If you ever need to talk to someone right away, tap Helpline.',
   },
   {
     id: 'nav',
-    target: '.bottom-nav',
-    placement: 'above',
-    title: 'Find your way around',
-    body: 'This bar stays with you on every screen. Tap Home any time to come back here.',
+    image: '/tutorial/nav.gif',
+    title: 'Finding your way',
+    body: 'The bar at the bottom — Speak, History, Contacts, Helpline — stays with you on every screen. Tap Speak any time to come back here.',
+  },
+  {
+    id: 'profile',
+    image: '/tutorial/profile.gif',
+    title: 'Your account',
+    body: 'Tap Profile at the top to update your name, email, or password.',
   },
   {
     id: 'finish',
-    target: null,
     title: 'You’re all set',
-    body: 'That’s everything. You won’t see this tour again.',
+    body: 'That’s everything. You can see this guide again anytime from Profile.',
   },
 ];
 
-// The element a step points at: first match of its selector, or — when the
-// step has a label — the match whose visible text equals it.
-const findTarget = (step) => {
-  if (!step.target) return null;
-  const matches = [...document.querySelectorAll(step.target)];
-  if (step.label) {
-    return matches.find((el) => el.textContent.trim() === step.label) ?? null;
-  }
-  return matches[0] ?? null;
-};
-
-const HIGHLIGHT_PAD = 6; // px the ring extends past the target on each side
-const CARD_GAP = 20; // px between the target and the card (arrow lives here)
-
-export default function SetupTutorial({ onComplete }) {
-  const [stepIndex, setStepIndex] = useState(0);
-  // Viewport rect of the current step's target; null = no target found, so
-  // the card centers over a plain dim and the tour stays completable even
-  // if a selector stops matching.
-  const [rect, setRect] = useState(null);
-  // Measured height of the card — the fit check below needs it before it can
-  // tell whether a positioned card would poke past a viewport edge. Content-
-  // dependent only (same width centered or positioned), so remeasuring on
-  // every render settles instead of oscillating.
-  const [cardHeight, setCardHeight] = useState(0);
+export default function SetupTutorial({ firstRun = false, onFinish }) {
+  const [index, setIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  // Per-slide image load failure → show the placeholder box instead. Reset on
+  // every slide change (below) so one missing asset doesn't hide later ones.
+  const [mediaError, setMediaError] = useState(false);
   const cardRef = useRef(null);
-  const nextButtonRef = useRef(null);
+  const primaryButtonRef = useRef(null);
 
-  const step = STEPS[stepIndex];
-  const isLast = stepIndex === STEPS.length - 1;
+  const slide = SLIDES[index];
+  const isLast = index === SLIDES.length - 1;
 
+  // New slide: reset the image-error flag and move focus to the primary
+  // button. Focusing the freshly-rendered dialog control also announces the
+  // slide to screen readers, so no aria-live region is needed. preventScroll
+  // stops the browser from scrolling the (inert) page behind the modal to
+  // bring the focused button into view — a replay from a scrolled Profile
+  // page would otherwise jump the background and offset the overlay.
   useLayoutEffect(() => {
-    const measure = () => {
-      const el = findTarget(step);
-      setRect(el ? el.getBoundingClientRect() : null);
-    };
-    measure();
-    // Moving focus into the freshly-labelled dialog also announces the new
-    // step to screen readers, so no aria-live region is needed.
-    nextButtonRef.current?.focus();
-    window.addEventListener('resize', measure);
-    window.addEventListener('scroll', measure, true); // .app-content can scroll on short viewports
-    return () => {
-      window.removeEventListener('resize', measure);
-      window.removeEventListener('scroll', measure, true);
-    };
-  }, [step]);
+    setMediaError(false);
+    primaryButtonRef.current?.focus({ preventScroll: true });
+  }, [index]);
 
-  useLayoutEffect(() => {
-    const height = cardRef.current.offsetHeight;
-    if (height !== cardHeight) setCardHeight(height);
-  });
-
+  // Close the tour. On the first-login run this persists completion so it
+  // won't auto-open again; a replay is already complete, so it just closes.
   const finish = async () => {
-    setSaving(true); // disables the button — no double PATCH
-    const { error } = await markSetupComplete();
-    // Close even on error: the flag just stays false and the tour re-shows
-    // next login, which beats leaving the user stuck on an undismissable modal.
-    if (error) console.error('Could not save setup completion:', error);
-    onComplete();
+    setSaving(true); // disables the buttons — no double PATCH / double close
+    if (firstRun) {
+      const { error } = await markSetupComplete();
+      // Close even on error: the flag just stays false and the tour re-shows
+      // next login, which beats leaving the user stuck on an undismissable modal.
+      if (error) console.error('Could not save setup completion:', error);
+    }
+    onFinish();
   };
 
-  // Both targets (home buttons, bottom nav) and the card render in viewport
-  // coordinates, so getBoundingClientRect maps straight to position: fixed.
-  let highlightStyle;
-  let cardStyle;
-  let placement = 'center';
-  if (rect) {
-    highlightStyle = {
-      top: rect.top - HIGHLIGHT_PAD,
-      left: rect.left - HIGHLIGHT_PAD,
-      width: rect.width + HIGHLIGHT_PAD * 2,
-      height: rect.height + HIGHLIGHT_PAD * 2,
-    };
-    // On short viewports (landscape phones) a positioned card can poke past a
-    // screen edge, and the overlay blocks scrolling it back into view — so
-    // when the card wouldn't fit on the step's side of the target, recenter
-    // it instead. The ring above still marks the target.
-    placement = step.placement;
-    if (placement === 'below' && rect.bottom + CARD_GAP + cardHeight > window.innerHeight) {
-      placement = 'center';
-    } else if (placement === 'above' && rect.top - CARD_GAP - cardHeight < 0) {
-      placement = 'center';
-    }
-  }
-  if (rect && placement !== 'center') {
-    // The card is inset 16px each side and capped at 420px, centered — mirror
-    // that math to aim the arrow at the target's center, clamped onto the card.
-    const cardWidth = Math.min(420, window.innerWidth - 32);
-    const cardLeft = (window.innerWidth - cardWidth) / 2;
-    const arrowX = Math.min(
-      Math.max(rect.left + rect.width / 2 - cardLeft, 24),
-      cardWidth - 24,
-    );
-    cardStyle = { '--arrow-x': `${arrowX}px` };
-    if (placement === 'below') {
-      cardStyle.top = rect.bottom + CARD_GAP;
-    } else {
-      cardStyle.bottom = window.innerHeight - rect.top + CARD_GAP;
-    }
-  }
-
-  // Tab wraps across the card's buttons. The app shell is inert while the
-  // tour runs (App.jsx), so this is only wrap-around comfort — without it,
-  // Tab from the last button detours through browser chrome.
+  // Tab wraps across the card's buttons. The app shell is inert while the tour
+  // runs (App.jsx), so this is only wrap-around comfort — without it, Tab from
+  // the last button detours through browser chrome.
   const trapFocus = (event) => {
     if (event.key !== 'Tab') return;
     const buttons = cardRef.current.querySelectorAll('button:not(:disabled)');
@@ -192,32 +131,52 @@ export default function SetupTutorial({ onComplete }) {
   };
 
   return (
-    <div className="tutorial-overlay">
-      {rect ? (
-        <div className="tutorial-highlight" style={highlightStyle} />
-      ) : (
-        <div className="tutorial-scrim" />
-      )}
-
+    <div className="tutorial-overlay" role="presentation">
       <div
         ref={cardRef}
-        className={`tutorial-card tutorial-card--${placement}`}
-        style={cardStyle}
+        className="tutorial-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="tutorial-title"
         onKeyDown={trapFocus}
       >
-        <h2 className="tutorial-title" id="tutorial-title">{step.title}</h2>
-        <p className="tutorial-body">{step.body}</p>
+        <button
+          type="button"
+          className="tutorial-skip"
+          onClick={finish}
+          disabled={saving}
+        >
+          {firstRun ? 'Skip' : 'Close'}
+        </button>
+
+        {/* Fixed-ratio media slot. Falls back to a labelled placeholder while
+            the real illustration for a slide is still missing. */}
+        <div className="tutorial-media">
+          {slide.image && !mediaError ? (
+            <img
+              className="tutorial-media__img"
+              src={slide.image}
+              alt=""
+              onError={() => setMediaError(true)}
+            />
+          ) : (
+            <div className="tutorial-media__fallback" aria-hidden="true">
+              Illustration coming soon
+            </div>
+          )}
+        </div>
+
+        <h2 className="tutorial-title" id="tutorial-title">{slide.title}</h2>
+        <p className="tutorial-body">{slide.body}</p>
         <p className="tutorial-progress">
-          Step {stepIndex + 1} of {STEPS.length}
+          Step {index + 1} of {SLIDES.length}
         </p>
+
         <div className="tutorial-buttons">
-          {stepIndex > 0 && (
+          {index > 0 && (
             <button
               type="button"
-              onClick={() => setStepIndex((i) => i - 1)}
+              onClick={() => setIndex((i) => i - 1)}
               disabled={saving}
             >
               Back
@@ -226,11 +185,11 @@ export default function SetupTutorial({ onComplete }) {
           <button
             type="button"
             className="tutorial-next"
-            ref={nextButtonRef}
-            onClick={isLast ? finish : () => setStepIndex((i) => i + 1)}
+            ref={primaryButtonRef}
+            onClick={isLast ? finish : () => setIndex((i) => i + 1)}
             disabled={saving}
           >
-            {isLast ? 'Get started' : 'Next'}
+            {isLast ? (firstRun ? 'Get started' : 'Done') : 'Next'}
           </button>
         </div>
       </div>

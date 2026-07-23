@@ -1,0 +1,308 @@
+/* LandingPage styles — matched to the main app's screens (PrimaryHome,
+   HelplinePage, SummaryReview): deep-blue #1a5276 accent, #1c2833 headings,
+   #2e4053 body, #85929e outlines, 0.5rem radius, a 34rem centered column,
+   filled-blue primary buttons and grey-outlined white cards. rem-based type.
+   Accessibility preserved: >=18px body, 48px+ tap targets, 3px focus rings,
+   high contrast. Mobile-first; the narrow column reflows on any width.
+
+   Palette is deliberately the app's — the team can restyle from here. */
+
+.landing {
+  color: #1c2833;
+  background: #ffffff;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* --- Header — mirrors the app shell's header (logo left, action right) --- */
+
+.landing__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #ccc;
+}
+
+.landing__logo {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #1a5276;
+  letter-spacing: 0.3px;
+}
+
+/* Filled-blue button (not a bare text link) so the account action is an
+   obvious tap target for older users. */
+.landing__login {
+  min-height: 48px;
+  padding: 0.5rem 1.25rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  background: #1a5276;
+  border: none;
+  border-radius: 0.5rem;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+/* --- Shared narrow column (same 34rem centered column as the app screens) --- */
+
+.landing__main {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.landing__hero,
+.landing__section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+/* --- Typography --- */
+
+.landing__title {
+  font-size: 2rem;
+  line-height: 1.25;
+  font-weight: 800;
+  margin: 0;
+  color: #1c2833;
+}
+
+.landing__subtitle {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #2e4053;
+}
+
+.landing__h2 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 0;
+  color: #1c2833;
+}
+
+.landing__body {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #2e4053;
+}
+
+/* --- Primary CTA — same filled-blue button as PrimaryHome/HelplinePage --- */
+
+.landing__cta {
+  width: 100%;
+  max-width: 22rem;
+  min-height: 64px;
+  margin-top: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  background: #1a5276;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.landing__cta:hover {
+  background: #16455f;
+}
+
+.landing__cta:focus-visible,
+.landing__login:focus-visible {
+  outline: 3px solid #1a5276;
+  outline-offset: 3px;
+}
+
+/* --- Hero step visual (You speak -> Summary -> Sent) --- */
+
+.landing__steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.landing__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Rounded-square tiles (0.5rem) with the app's subtle grey + outline. */
+.landing__step-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 0.5rem;
+  background: #f8f9f9;
+  border: 2px solid #85929e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.landing__step-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #2e4053;
+}
+
+.landing__step-arrow {
+  font-size: 1.5rem;
+  color: #85929e;
+}
+
+/* Shapes inside the step tiles */
+.landing__shape-mic {
+  width: 22px;
+  height: 36px;
+  border-radius: 0.5rem;
+  background: #1a5276;
+}
+
+.landing__shape-contact {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #1a5276;
+}
+
+.landing__shape-line {
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: #1a5276;
+}
+
+.landing__shape-line--2 {
+  width: 80%;
+}
+
+.landing__shape-line--3 {
+  width: 60%;
+}
+
+/* --- Cards (how-it-works + trust) — same outlined white card as HelplinePage --- */
+
+.landing__cards {
+  width: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.landing__card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  width: 100%;
+  padding: 1.25rem 1rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  text-align: left;
+}
+
+/* Numbered step badge — filled blue, squared to match the app. */
+.landing__badge {
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.5rem;
+  background: #1a5276;
+  color: #ffffff;
+  font-size: 1.375rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Checkmark tile — blue check on the app's subtle grey. */
+.landing__check {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  background: #f8f9f9;
+  border: 2px solid #85929e;
+  color: #1a5276;
+  font-size: 1.125rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.landing__card-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 0;
+  color: #1c2833;
+}
+
+.landing__card-desc {
+  font-size: 1.125rem;
+  line-height: 1.5;
+  margin: 0;
+  color: #2e4053;
+}
+
+.landing__lead {
+  color: #1c2833;
+}
+
+/* --- Reassurance note — subtle grey card, matching the app's read-only tone --- */
+
+.landing__note {
+  width: 100%;
+  margin: 0;
+  padding: 1.25rem 1rem;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+  background: #f8f9f9;
+  font-size: 1.25rem;
+  line-height: 1.5;
+  color: #1c2833;
+}
+
+/* --- Final CTA spacing --- */
+
+.landing__section--cta {
+  gap: 1.25rem;
+}
+
+/* --- Footer --- */
+
+.landing__footer {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: 1rem;
+  color: #85929e;
+  border-top: 1px solid #ccc;
+}

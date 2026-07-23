@@ -46,6 +46,11 @@ input {
   font-weight: bold;
 }
 
+.app-header__actions {
+  display: flex;
+  gap: 8px;
+}
+
 .app-content {
   flex: 1;
   padding: 16px;
@@ -64,6 +69,24 @@ input {
   margin: 0 auto;
   padding: 32px 16px;
   text-align: center;
+}
+
+/* Back to the landing page — only shown when reached from the landing CTA. */
+.auth-back {
+  display: block;
+  margin-bottom: 8px;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  color: #1a5276;
+  font-weight: 600;
+  text-align: left;
+}
+
+/* Match the focus care taken on the landing CTAs. */
+.auth-back:focus-visible {
+  outline: 3px solid #1a5276;
+  outline-offset: 3px;
 }
 
 .auth-form {
@@ -96,7 +119,7 @@ input {
 }
 
 .role-picker button.selected {
-  border: 3px solid #1a73e8;
+  border: 3px solid #1a5276;
   font-weight: bold;
 }
 

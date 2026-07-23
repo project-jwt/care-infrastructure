@@ -21,6 +21,7 @@ from models.user_model import User
 from schemas.summary import (
     DraftIn,
     DraftOut,
+    RecipientOut,
     SendIn,
     SendOut,
     SentTo,
@@ -127,6 +128,31 @@ async def get_summary(
     if summary is None:
         raise HTTPException(status_code=404, detail="Summary not found")
     return summary
+
+
+@router.get("/{summary_id}/recipients", response_model=list[RecipientOut])
+async def list_summary_recipients(
+    summary_id: int,
+    user: User = Depends(require_primary),
+    session: AsyncSession = Depends(get_db),
+):
+    """GET /api/summaries/:id/recipients -> who this summary was sent to
+    ({ contactId, fullName, sentAt }), oldest send first — the sender's receipt.
+
+    Owner-scoped exactly like get_summary: find_by_id returns None for both
+    "doesn't exist" and "not yours", so a primary can't read another primary's
+    recipient list — 404 either way. An unsent summary returns []. A recipient
+    who has deleted their account comes back with contactId/fullName null
+    ("Deleted user")."""
+    summary = await summary_model.find_by_id(session, summary_id, user.id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Summary not found")
+
+    rows = await summary_model.list_recipients_for_summary(session, summary_id)
+    return [
+        RecipientOut(contact_id=r.contact_id, full_name=r.full_name, sent_at=r.sent_at)
+        for r in rows
+    ]
 
 
 @router.patch("/{summary_id}", response_model=SummaryOut)
