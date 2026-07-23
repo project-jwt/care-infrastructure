@@ -22,7 +22,7 @@ import {
   listSummaries,
   updateSummary,
 } from '../adapters/summaries-adapters';
-import { formatDate } from '../utils';
+import { displayName, formatDate } from '../utils';
 import './PastSummaries.css';
 
 export default function PastSummaries({ onNavigate, onSendSummary }) {
@@ -215,8 +215,13 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
 
       {selected.transcript && (
         <details className="past-summaries__transcript">
-          <summary>What you said at the time</summary>
-          <p>{selected.transcript}</p>
+          <summary className="past-summaries__transcript-toggle">
+            <span className="past-summaries__transcript-chevron" aria-hidden="true">
+              &#9656;
+            </span>
+            <span>Tap to read what you said</span>
+          </summary>
+          <p className="past-summaries__transcript-body">{selected.transcript}</p>
         </details>
       )}
 
@@ -237,7 +242,10 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
             {recipients.map((r, i) => (
               <li key={i} className="past-summaries__recipient">
                 <span className="past-summaries__recipient-name">
-                  {r.fullName ?? 'Deleted user'}
+                  {/* The name the sender saved them under ("Mom"), same as
+                      everywhere else — falls back to "Deleted user" once the
+                      contact and its link are gone (both names null). */}
+                  {displayName(r) || 'Deleted user'}
                 </span>
                 <span className="past-summaries__recipient-date">{formatDate(r.sentAt)}</span>
               </li>

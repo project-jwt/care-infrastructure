@@ -4,6 +4,7 @@
 from datetime import datetime
 
 from core.security import create_access_token
+from models.contact_model import TrustedContactLink
 from models.summary_model import Summary, SummaryRecipient
 from models.user_model import User
 
@@ -37,8 +38,55 @@ async def test_recipients_lists_names_oldest_first(client, sessions):
     assert resp.status_code == 200
     body = resp.json()
     assert [r["fullName"] for r in body] == ["Alice", "Bob"]  # oldest first
+    # No trusted-contact link here, so nickname is null and the frontend falls
+    # back to fullName — the nickname-preferred path is covered below.
+    assert [r["nickname"] for r in body] == [None, None]
     assert body[0]["contactId"] == alice.id
     assert "sentAt" in body[0]
+
+
+async def test_recipients_use_sender_saved_nickname(client, sessions):
+    # The receipt shows the label the SENDER saved the contact under ("Mom"),
+    # not the contact's own account name.
+    async with sessions() as s:
+        primary = await _user(s, email="p-nick@example.com", role="primary")
+        mom = await _user(s, email="mom@example.com", full_name="Margaret Jones", role="contact")
+        summary = Summary(user_id=primary.id, summary_text="hi", transcript="raw")
+        s.add(summary)
+        await s.flush()
+        s.add(TrustedContactLink(owner_id=primary.id, contact_id=mom.id, nickname="Mom"))
+        s.add(SummaryRecipient(summary_id=summary.id, contact_id=mom.id, sent_at=datetime(2026, 1, 1, 9, 0)))
+        await s.commit()
+        sid = summary.id
+
+    resp = await client.get(f"/api/summaries/{sid}/recipients", headers=_auth(primary))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body[0]["nickname"] == "Mom"
+    assert body[0]["fullName"] == "Margaret Jones"  # still returned as fallback
+
+
+async def test_recipient_nickname_is_scoped_to_this_sender(client, sessions):
+    # Another primary's nickname for the same contact must NOT leak into this
+    # sender's receipt — the link is matched on (owner_id, contact_id).
+    async with sessions() as s:
+        sender = await _user(s, email="sender@example.com", role="primary")
+        other = await _user(s, email="other@example.com", role="primary")
+        shared = await _user(s, email="shared@example.com", full_name="Sam Real", role="contact")
+        summary = Summary(user_id=sender.id, summary_text="hi", transcript="raw")
+        s.add(summary)
+        await s.flush()
+        # Only the OTHER primary nicknamed this contact; the sender didn't.
+        s.add(TrustedContactLink(owner_id=other.id, contact_id=shared.id, nickname="Bestie"))
+        s.add(SummaryRecipient(summary_id=summary.id, contact_id=shared.id, sent_at=datetime(2026, 1, 1, 9, 0)))
+        await s.commit()
+        sid = summary.id
+
+    resp = await client.get(f"/api/summaries/{sid}/recipients", headers=_auth(sender))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body[0]["nickname"] is None  # not "Bestie" — that's the other primary's label
+    assert body[0]["fullName"] == "Sam Real"
 
 
 async def test_deleted_recipient_comes_back_null(client, sessions):
@@ -59,6 +107,7 @@ async def test_deleted_recipient_comes_back_null(client, sessions):
     assert len(body) == 1
     assert body[0]["contactId"] is None
     assert body[0]["fullName"] is None  # frontend renders this as "Deleted user"
+    assert body[0]["nickname"] is None  # link gone too — no name to show
 
 
 async def test_unsent_summary_has_no_recipients(client, sessions):

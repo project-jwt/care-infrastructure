@@ -114,8 +114,46 @@
   min-height: 48px;
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   font-weight: 700;
   color: #1a5276;
+  /* Read as a tappable control, not just bold text: a bordered pill with an
+     underlined label and a chevron that turns when it opens. */
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #1a5276;
+  border-radius: 8px;
+  text-decoration: underline;
+  list-style: none; /* drop the default disclosure triangle — we draw our own */
+}
+
+/* Hide the native marker in WebKit/Safari too. */
+.past-summaries__transcript summary::-webkit-details-marker {
+  display: none;
+}
+
+.past-summaries__transcript summary:hover {
+  background: #eaf2f8;
+}
+
+/* Our own chevron: points right when closed, rotates down when open. */
+.past-summaries__transcript-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  font-size: 0.9em;
+}
+
+.past-summaries__transcript[open] summary {
+  text-decoration: none;
+  margin-bottom: 0.5rem;
+}
+
+.past-summaries__transcript[open] .past-summaries__transcript-chevron {
+  transform: rotate(90deg);
+}
+
+.past-summaries__transcript-body {
+  margin: 0;
+  white-space: pre-line;
 }
 
 /* --- Sent to (delivery receipt) --- */

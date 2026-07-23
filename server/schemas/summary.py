@@ -109,14 +109,18 @@ class SendOut(CamelModel):
 
 class RecipientOut(CamelModel):
     """One row of GET /api/summaries/:id/recipients (primary's delivery
-    receipt): { contactId, fullName, sentAt }.
+    receipt): { contactId, nickname, fullName, sentAt }.
+
+    nickname is the label the sender saved this contact under ("Mom"); the
+    frontend prefers it over fullName, matching displayName everywhere else.
 
     A contact who has since deleted their account comes back with
-    contactId=null and fullName=null — the receipt row survives (contact_id
+    contactId=null and both names null — the receipt row survives (contact_id
     was SET NULL, not cascaded), and the frontend renders it as "Deleted user".
     """
 
     contact_id: int | None
+    nickname: str | None
     full_name: str | None
     sent_at: datetime
 
