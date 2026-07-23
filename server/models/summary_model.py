@@ -209,3 +209,32 @@ async def list_received_for_contact(
         .order_by(SummaryRecipient.sent_at.desc(), SummaryRecipient.id.desc())
     )
     return list(result.all())
+
+
+async def list_recipients_for_summary(
+    session: AsyncSession, summary_id: int
+) -> list[Row]:
+    """Everyone a summary was sent to, oldest send first — the sender's
+    delivery receipt (GET /api/summaries/:id/recipients).
+
+    outerjoin (LEFT JOIN) to users so a recipient who has since deleted their
+    account still returns a row: contact_id and full_name come back NULL (the
+    receipt was preserved by ON DELETE SET NULL), which the frontend shows as
+    "Deleted user". Only id + name are selected — the full users row
+    (password_hash) never enters the query, same as list_received_for_contact.
+
+    Scoping: the CALLER checks the summary belongs to the primary (the router
+    does, via find_by_id) before calling this — here we filter only by
+    summary_id.
+    """
+    result = await session.execute(
+        select(
+            SummaryRecipient.contact_id,
+            User.full_name,
+            SummaryRecipient.sent_at,
+        )
+        .outerjoin(User, User.id == SummaryRecipient.contact_id)
+        .where(SummaryRecipient.summary_id == summary_id)
+        .order_by(SummaryRecipient.sent_at.asc(), SummaryRecipient.id.asc())
+    )
+    return list(result.all())

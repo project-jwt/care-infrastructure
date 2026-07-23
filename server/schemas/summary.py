@@ -107,6 +107,20 @@ class SendOut(CamelModel):
     sent_to: list[SentTo]
 
 
+class RecipientOut(CamelModel):
+    """One row of GET /api/summaries/:id/recipients (primary's delivery
+    receipt): { contactId, fullName, sentAt }.
+
+    A contact who has since deleted their account comes back with
+    contactId=null and fullName=null — the receipt row survives (contact_id
+    was SET NULL, not cascaded), and the frontend renders it as "Deleted user".
+    """
+
+    contact_id: int | None
+    full_name: str | None
+    sent_at: datetime
+
+
 class SummarySender(CamelModel):
     """The `from` object on a received summary: { id, fullName } — the
     primary user who sent it, and nothing more (no email, no role)."""

@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import {
   deleteSummary,
   getSummary,
+  getSummaryRecipients,
   listSummaries,
   updateSummary,
 } from '../adapters/summaries-adapters';
@@ -34,6 +35,11 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
   const [editText, setEditText] = useState('');
   const [isBusy, setIsBusy] = useState(false); // a request is in flight
   const [actionError, setActionError] = useState(null);
+
+  // "Sent to" receipt for the open summary. null = still loading; [] = never
+  // sent; recipientsError = the receipt call failed (the summary still shows).
+  const [recipients, setRecipients] = useState(null);
+  const [recipientsError, setRecipientsError] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -57,6 +63,14 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
     }
     setSelected(data);
     setMode('detail');
+
+    // Load the "sent to" receipt separately — a failure here must not stop the
+    // summary + transcript from rendering.
+    setRecipients(null);
+    setRecipientsError(false);
+    const { data: recs, error: recErr } = await getSummaryRecipients(id);
+    if (recErr) setRecipientsError(true);
+    else setRecipients(recs);
   };
 
   const handleSaveEdit = async () => {
@@ -205,6 +219,32 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
           <p>{selected.transcript}</p>
         </details>
       )}
+
+      {/* Sent to — who this summary was delivered to (the sender's receipt). */}
+      <section className="past-summaries__sent-to" aria-labelledby="sent-to-h">
+        <h2 id="sent-to-h" className="past-summaries__sent-to-heading">Sent to</h2>
+        {recipientsError && (
+          <p className="past-summaries__hint">We couldn&apos;t load who this was sent to.</p>
+        )}
+        {!recipientsError && recipients === null && (
+          <p className="past-summaries__hint">Loading&hellip;</p>
+        )}
+        {!recipientsError && recipients !== null && recipients.length === 0 && (
+          <p className="past-summaries__hint">Not sent yet.</p>
+        )}
+        {!recipientsError && recipients !== null && recipients.length > 0 && (
+          <ul className="past-summaries__recipients">
+            {recipients.map((r, i) => (
+              <li key={i} className="past-summaries__recipient">
+                <span className="past-summaries__recipient-name">
+                  {r.fullName ?? 'Deleted user'}
+                </span>
+                <span className="past-summaries__recipient-date">{formatDate(r.sentAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <p className="past-summaries__status" role="status" aria-live="polite">
         {isBusy ? 'One moment…' : actionError || ''}
