@@ -2,7 +2,7 @@
 // (handleFetch attaches it automatically); the backend rejects contacts
 // with 403.
 
-import { getToken, handleFetch } from './fetch-helpers';
+import { getBlob, getToken, handleFetch } from './fetch-helpers';
 
 // Uploads a recorded audio clip to be transcribed server-side (Deepgram),
 // for browsers without a working Web Speech API (iOS). Returns
@@ -93,3 +93,54 @@ export const sendSummary = (id, contactIds) =>
     method: 'POST',
     body: JSON.stringify({ contactIds }),
   });
+
+// ── Image attachments ─────────────────────────────────────────────────────
+
+// A summary's photos as metadata (no bytes), oldest first:
+// [{ id, filename, contentType, byteSize, createdAt }].
+export const listSummaryImages = (id) =>
+  handleFetch(`/api/summaries/${id}/images`);
+
+// Uploads one photo (multipart, like transcribeAudio — the browser must set
+// the multipart Content-Type/boundary, so we don't route through handleFetch).
+// Returns { data: ImageOut, error }. Errors: 413 too big, 415 wrong type,
+// 409 already at the 2-photo limit, 404 not the caller's summary.
+export const uploadSummaryImage = async (id, file) => {
+  const form = new FormData();
+  form.append('image', file, file.name);
+
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  try {
+    const response = await fetch(`/api/summaries/${id}/images`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+    let body = null;
+    try {
+      const text = await response.text();
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = null;
+    }
+    if (!response.ok) {
+      return {
+        data: null,
+        error: { status: response.status, message: body?.message || 'Something went wrong' },
+      };
+    }
+    return { data: body, error: null };
+  } catch {
+    return { data: null, error: { status: 0, message: 'Could not reach the server' } };
+  }
+};
+
+// The bytes of one photo, as a Blob (caller makes an object URL for <img>).
+export const getSummaryImageBlob = (id, imageId) =>
+  getBlob(`/api/summaries/${id}/images/${imageId}/raw`);
+
+export const deleteSummaryImage = (id, imageId) =>
+  handleFetch(`/api/summaries/${id}/images/${imageId}`, { method: 'DELETE' });

@@ -202,6 +202,101 @@
   color: #1a5276;
 }
 
+/* --- Photos (attachments) --- */
+
+.past-summaries__photos {
+  width: 100%;
+  text-align: left;
+}
+
+.past-summaries__photos-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: #1c2833;
+}
+
+.past-summaries__photo-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.past-summaries__photo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.past-summaries__photo-img {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+}
+
+.past-summaries__photo-fallback {
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.5rem;
+  border: 2px dashed #85929e;
+  border-radius: 0.5rem;
+  color: #5d6d7e;
+  font-size: 0.95rem;
+}
+
+.past-summaries__photo-remove {
+  min-height: 44px;
+  padding: 0.25rem 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #922b21;
+  background: none;
+  border: 2px solid #922b21;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.past-summaries__photo-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The file input is hidden; the whole label is the tappable button. */
+.past-summaries__photo-add {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0.5rem 1.25rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1a5276;
+  border: 2px solid #1a5276;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.past-summaries__photo-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .past-summaries__label {
   align-self: flex-start;
   font-size: 1.25rem;
@@ -296,7 +391,10 @@
 .past-summaries__primary:focus-visible,
 .past-summaries__secondary:focus-visible,
 .past-summaries__danger:focus-visible,
-.past-summaries__transcript summary:focus-visible {
+.past-summaries__photo-remove:focus-visible,
+.past-summaries__transcript summary:focus-visible,
+/* the file input is visually hidden, so surface its focus on the label */
+.past-summaries__photo-add:focus-within {
   outline: 3px solid #1a5276;
   outline-offset: 3px;
 }

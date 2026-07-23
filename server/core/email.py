@@ -26,15 +26,23 @@ class EmailSendError(Exception):
 
 
 async def send_summary_email(
-    to_email: str, summary_text: str, from_name: str | None = None
+    to_email: str,
+    summary_text: str,
+    from_name: str | None = None,
+    attachments: list[dict] | None = None,
 ) -> None:
     """Email one summary to one trusted contact. Raises EmailSendError on any
     Resend/network failure — the send route catches and 502s, recording nothing.
+
+    attachments (optional): the summary's photos, each a dict
+    { filename, content (bytes), content_type }. They ride along as real email
+    attachments; the body notes how many there are.
 
     The resend SDK is synchronous (blocking HTTP), so the call runs in a
     worker thread via asyncio.to_thread instead of blocking the event loop.
     """
     sender_label = from_name or "Someone you trust"
+    attachments = attachments or []
 
     # summary_text is user content going into an HTML email: escape it, then
     # turn the draft's blank-line paragraph breaks into <p> blocks and the
@@ -49,6 +57,9 @@ async def send_summary_email(
         f"<p>{html.escape(sender_label)} shared this summary with you:</p>"
         f"<blockquote>{paragraphs}</blockquote>"
     )
+    if attachments:
+        count = len(attachments)
+        body += f"<p>{count} photo{'s' if count != 1 else ''} attached.</p>"
 
     params: resend.Emails.SendParams = {
         "from": SENDER,
@@ -56,6 +67,17 @@ async def send_summary_email(
         "subject": f"{sender_label} shared a summary with you",
         "html": body,
     }
+    if attachments:
+        # Resend's Attachment.content takes a list of byte-values (or base64);
+        # list(bytes) gives exactly that, no encoding step.
+        params["attachments"] = [
+            {
+                "filename": a.get("filename") or "photo",
+                "content": list(a["content"]),
+                "content_type": a["content_type"],
+            }
+            for a in attachments
+        ]
     try:
         await asyncio.to_thread(resend.Emails.send, params)
     except ResendError as exc:

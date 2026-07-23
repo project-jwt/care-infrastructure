@@ -3,7 +3,18 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Row, Text, func, insert, select
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    Row,
+    Text,
+    func,
+    insert,
+    select,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -75,6 +86,40 @@ class SummaryRecipient(Base):
     # only creates MISSING tables: a local DB that already has this one needs
     # the table recreated, or CREATE INDEX by hand, to pick this up.)
     __table_args__ = (Index("ix_summary_recipients_contact_sent", "contact_id", "sent_at"),)
+
+
+class SummaryImage(Base):
+    """A photo attached to a summary (spec: summary image attachments).
+
+    Bytes live right in the row (bytea) — the app has no object storage, and
+    the 2-per-summary / 10 MB cap keeps rows small enough for that to be fine.
+    summary_id CASCADEs: deleting the summary drops its images, so no orphaned
+    blobs are left behind. The cap itself is enforced in the router (a count
+    check), not the DB — there's no clean column constraint for "at most N rows
+    per FK".
+    """
+
+    __tablename__ = "summary_images"
+
+    # Python attribute `id`, DB column `image_id` — same trick as the others.
+    id: Mapped[int] = mapped_column("image_id", primary_key=True)
+
+    summary_id: Mapped[int] = mapped_column(
+        ForeignKey("summaries.summary_id", ondelete="CASCADE")
+    )
+
+    content_type: Mapped[str] = mapped_column(Text)      # image/jpeg|png|webp
+    filename: Mapped[str | None] = mapped_column(Text)   # original upload name
+    byte_size: Mapped[int] = mapped_column(Integer)      # for display + the cap
+    data: Mapped[bytes] = mapped_column(LargeBinary)     # the raw bytes
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Images of one summary are read together (list + email); index the FK
+    # since Postgres doesn't do it automatically.
+    __table_args__ = (Index("ix_summary_images_summary", "summary_id"),)
 
 
 # ── Query helpers ────────────────────────────────────────────────────────────
@@ -255,3 +300,136 @@ async def list_recipients_for_summary(
         .order_by(SummaryRecipient.sent_at.asc(), SummaryRecipient.id.asc())
     )
     return list(result.all())
+
+
+# ── Image helpers ─────────────────────────────────────────────────────────────
+# The `data` (bytea) column is NEVER selected for list/metadata queries — only
+# the /raw endpoint's single-image fetch loads the bytes. Listing metadata must
+# stay cheap even though the blob sits on the same row.
+
+# Columns that make up an image's metadata (everything but the bytes).
+_IMAGE_META_COLS = (
+    SummaryImage.id,
+    SummaryImage.filename,
+    SummaryImage.content_type,
+    SummaryImage.byte_size,
+    SummaryImage.created_at,
+)
+
+
+async def count_images(session: AsyncSession, summary_id: int) -> int:
+    """How many images a summary already has — the router's cap check."""
+    result = await session.execute(
+        select(func.count())
+        .select_from(SummaryImage)
+        .where(SummaryImage.summary_id == summary_id)
+    )
+    return int(result.scalar_one())
+
+
+async def add_image(
+    session: AsyncSession,
+    summary_id: int,
+    *,
+    content_type: str,
+    filename: str | None,
+    byte_size: int,
+    data: bytes,
+) -> SummaryImage:
+    """Store one image on a summary. Caller enforces ownership + the 2/10 MB
+    caps BEFORE calling — this just writes the row."""
+    image = SummaryImage(
+        summary_id=summary_id,
+        content_type=content_type,
+        filename=filename,
+        byte_size=byte_size,
+        data=data,
+    )
+    session.add(image)
+    await session.commit()
+    await session.refresh(image)  # pull back id + created_at
+    return image
+
+
+async def list_images(session: AsyncSession, summary_id: int) -> list[Row]:
+    """Metadata rows for a summary's images, oldest first (no bytes)."""
+    result = await session.execute(
+        select(*_IMAGE_META_COLS)
+        .where(SummaryImage.summary_id == summary_id)
+        .order_by(SummaryImage.id.asc())
+    )
+    return list(result.all())
+
+
+async def list_images_for_summaries(
+    session: AsyncSession, summary_ids: list[int]
+) -> dict[int, list[Row]]:
+    """Metadata for many summaries' images in ONE query, grouped by summary_id
+    (the received-inbox list uses this to avoid an N+1). Empty ids -> {}."""
+    if not summary_ids:
+        return {}
+    result = await session.execute(
+        select(SummaryImage.summary_id, *_IMAGE_META_COLS)
+        .where(SummaryImage.summary_id.in_(summary_ids))
+        .order_by(SummaryImage.summary_id.asc(), SummaryImage.id.asc())
+    )
+    grouped: dict[int, list[Row]] = {}
+    for row in result.all():
+        grouped.setdefault(row.summary_id, []).append(row)
+    return grouped
+
+
+async def load_images_with_data(
+    session: AsyncSession, summary_id: int
+) -> list[SummaryImage]:
+    """Full image rows (bytes included), oldest first — for building the send
+    email's attachments. Small by construction (<= 2 rows, <= 10 MB each)."""
+    result = await session.execute(
+        select(SummaryImage)
+        .where(SummaryImage.summary_id == summary_id)
+        .order_by(SummaryImage.id.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def find_image(
+    session: AsyncSession, summary_id: int, image_id: int
+) -> SummaryImage | None:
+    """One image WITH its bytes — for the /raw endpoints. Scoped to summary_id
+    so an image_id from another summary can't be fetched via this summary."""
+    result = await session.execute(
+        select(SummaryImage).where(
+            SummaryImage.id == image_id,
+            SummaryImage.summary_id == summary_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def delete_image(
+    session: AsyncSession, summary_id: int, image_id: int
+) -> bool:
+    """Delete one image. True if removed, False if not found on that summary —
+    the router turns False into 404."""
+    image = await find_image(session, summary_id, image_id)
+    if image is None:
+        return False
+    await session.delete(image)
+    await session.commit()
+    return True
+
+
+async def is_recipient(
+    session: AsyncSession, summary_id: int, contact_id: int
+) -> bool:
+    """Was this summary sent to this contact? Authorizes a contact's read of a
+    received summary's images — the same recipient link the inbox is scoped by."""
+    result = await session.execute(
+        select(SummaryRecipient.id)
+        .where(
+            SummaryRecipient.summary_id == summary_id,
+            SummaryRecipient.contact_id == contact_id,
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None

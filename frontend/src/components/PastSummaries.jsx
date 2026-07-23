@@ -14,16 +14,24 @@
 // send flow — the send path for anyone who saved before adding contacts (or
 // who just wants to re-send an old summary).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   deleteSummary,
+  deleteSummaryImage,
   getSummary,
+  getSummaryImageBlob,
   getSummaryRecipients,
   listSummaries,
+  listSummaryImages,
   updateSummary,
+  uploadSummaryImage,
 } from '../adapters/summaries-adapters';
 import { displayName, formatDate } from '../utils';
 import './PastSummaries.css';
+
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // keep in step with the server cap
+const MAX_IMAGES = 2;
 
 export default function PastSummaries({ onNavigate, onSendSummary }) {
   const [items, setItems] = useState(null); // null = still loading
@@ -41,6 +49,23 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
   const [recipients, setRecipients] = useState(null);
   const [recipientsError, setRecipientsError] = useState(false);
 
+  // Photos on the open summary. images: null = loading, [] = none, else the
+  // metadata list. imageUrls maps imageId -> object URL of its bytes. The
+  // created object URLs are tracked in a ref so they can be revoked on cleanup.
+  const [images, setImages] = useState(null);
+  const [imageUrls, setImageUrls] = useState({});
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState(null);
+  const objectUrls = useRef([]);
+
+  const revokeImageUrls = () => {
+    objectUrls.current.forEach((u) => URL.revokeObjectURL(u));
+    objectUrls.current = [];
+  };
+
+  // Revoke any outstanding object URLs when the screen unmounts.
+  useEffect(() => revokeImageUrls, []);
+
   useEffect(() => {
     const load = async () => {
       const { data, error } = await listSummaries();
@@ -49,6 +74,71 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
     };
     load();
   }, []);
+
+  // Fetch a summary's photo metadata, then each one's bytes as an object URL.
+  // Revokes any URLs from a previously-open summary first.
+  const loadImages = async (id) => {
+    revokeImageUrls();
+    setImageUrls({});
+    setImages(null);
+    setImageError(null);
+    const { data, error } = await listSummaryImages(id);
+    if (error) {
+      setImageError("We couldn't load the photos on this summary.");
+      setImages([]);
+      return;
+    }
+    setImages(data);
+    const urls = {};
+    for (const img of data) {
+      const { data: blob } = await getSummaryImageBlob(id, img.id);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        urls[img.id] = url;
+        objectUrls.current.push(url);
+      }
+    }
+    setImageUrls(urls);
+  };
+
+  const handleAddPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // let the same file be re-picked after an error
+    if (!file) return;
+    setImageError(null);
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      setImageError('Please choose a JPEG, PNG, or WebP photo.');
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError('That photo is too large. Please choose one under 10 MB.');
+      return;
+    }
+    setImageBusy(true);
+    const { error } = await uploadSummaryImage(selected.id, file);
+    setImageBusy(false);
+    if (error) {
+      setImageError(
+        error.status === 409
+          ? `You can attach at most ${MAX_IMAGES} photos.`
+          : "We couldn't add that photo. Please try again.",
+      );
+      return;
+    }
+    await loadImages(selected.id);
+  };
+
+  const handleRemovePhoto = async (imageId) => {
+    setImageBusy(true);
+    setImageError(null);
+    const { error } = await deleteSummaryImage(selected.id, imageId);
+    setImageBusy(false);
+    if (error) {
+      setImageError("We couldn't remove that photo. Please try again.");
+      return;
+    }
+    await loadImages(selected.id);
+  };
 
   const openDetail = async (id) => {
     setActionError(null);
@@ -71,6 +161,9 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
     const { data: recs, error: recErr } = await getSummaryRecipients(id);
     if (recErr) setRecipientsError(true);
     else setRecipients(recs);
+
+    // Photos load independently too — a failure shows a hint, never blocks.
+    loadImages(id);
   };
 
   const handleSaveEdit = async () => {
@@ -104,6 +197,10 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
   };
 
   const backToList = () => {
+    revokeImageUrls();
+    setImages(null);
+    setImageUrls({});
+    setImageError(null);
     setSelected(null);
     setActionError(null);
     setMode('list');
@@ -224,6 +321,64 @@ export default function PastSummaries({ onNavigate, onSendSummary }) {
           <p className="past-summaries__transcript-body">{selected.transcript}</p>
         </details>
       )}
+
+      {/* Photos — attachments that go out with the summary when it's sent. */}
+      <section className="past-summaries__photos" aria-labelledby="photos-h">
+        <h2 id="photos-h" className="past-summaries__photos-heading">Photos</h2>
+
+        {images === null && (
+          <p className="past-summaries__hint">Loading&hellip;</p>
+        )}
+        {images !== null && images.length === 0 && (
+          <p className="past-summaries__hint">
+            No photos yet. Add one and it will be sent along with this summary.
+          </p>
+        )}
+        {images !== null && images.length > 0 && (
+          <ul className="past-summaries__photo-list">
+            {images.map((img) => (
+              <li key={img.id} className="past-summaries__photo">
+                {imageUrls[img.id] ? (
+                  <img
+                    className="past-summaries__photo-img"
+                    src={imageUrls[img.id]}
+                    alt={img.filename || 'Attached photo'}
+                  />
+                ) : (
+                  <span className="past-summaries__photo-fallback">
+                    Couldn&apos;t load photo
+                  </span>
+                )}
+                {mode === 'detail' && (
+                  <button
+                    type="button"
+                    className="past-summaries__photo-remove"
+                    onClick={() => handleRemovePhoto(img.id)}
+                    disabled={imageBusy}
+                  >
+                    Remove
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {mode === 'detail' && images !== null && images.length < MAX_IMAGES && (
+          <label className="past-summaries__photo-add">
+            {imageBusy ? 'Adding…' : 'Add a photo'}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="past-summaries__photo-input"
+              onChange={handleAddPhoto}
+              disabled={imageBusy}
+            />
+          </label>
+        )}
+
+        {imageError && <p className="past-summaries__error">{imageError}</p>}
+      </section>
 
       {/* Sent to — who this summary was delivered to (the sender's receipt). */}
       <section className="past-summaries__sent-to" aria-labelledby="sent-to-h">

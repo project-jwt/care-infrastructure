@@ -7,7 +7,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from models.user_model import User
 from schemas.summary import (
     DraftIn,
     DraftOut,
+    ImageOut,
     RecipientOut,
     SendIn,
     SendOut,
@@ -36,6 +37,27 @@ from schemas.summary import (
 # A spoken problem description is seconds long; anything much bigger is a
 # mistake or abuse, not a real recording.
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
+
+# Image attachment limits (spec): 2 photos per summary, 10 MB each, and only
+# the three web-safe raster formats. The magic-byte prefixes below re-check the
+# actual bytes so a client can't smuggle HTML/SVG in under a "image/png"
+# content-type header (defence in depth alongside X-Content-Type-Options).
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_IMAGES_PER_SUMMARY = 2
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+def _sniff_image_type(data: bytes) -> str | None:
+    """Return the content-type implied by the leading bytes, or None if the
+    data isn't one of our allowed raster formats. Guards against a mislabelled
+    or malicious upload (e.g. HTML/SVG claiming to be image/png)."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +182,137 @@ async def list_summary_recipients(
     ]
 
 
+# ── Image attachments (primary manages their own summary's photos) ────────────
+# Every endpoint resolves the summary through the owner-scoped find_by_id first,
+# so another primary's summary is a 404 (never "403" — we don't confirm it
+# exists), the same rule as the rest of this router.
+
+
+def _image_out(row) -> ImageOut:
+    return ImageOut(
+        id=row.id,
+        filename=row.filename,
+        content_type=row.content_type,
+        byte_size=row.byte_size,
+        created_at=row.created_at,
+    )
+
+
+@router.get("/{summary_id}/images", response_model=list[ImageOut])
+async def list_summary_images(
+    summary_id: int,
+    user: User = Depends(require_primary),
+    session: AsyncSession = Depends(get_db),
+):
+    """GET /api/summaries/:id/images -> the summary's photos as metadata
+    (no bytes), oldest first."""
+    summary = await summary_model.find_by_id(session, summary_id, user.id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Summary not found")
+    rows = await summary_model.list_images(session, summary_id)
+    return [_image_out(r) for r in rows]
+
+
+@router.post("/{summary_id}/images", response_model=ImageOut, status_code=201)
+async def upload_summary_image(
+    summary_id: int,
+    image: UploadFile = File(...),
+    user: User = Depends(require_primary),
+    session: AsyncSession = Depends(get_db),
+):
+    """POST /api/summaries/:id/images  (multipart form, field "image") -> ImageOut
+
+    Rejections: 404 not the caller's summary; 415 wrong type (by header AND by
+    magic bytes); 413 over 10 MB; 409 the summary already has 2 photos.
+    """
+    summary = await summary_model.find_by_id(session, summary_id, user.id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Summary not found")
+
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail="That file type isn't supported. Please use a JPEG, PNG, or WebP image.",
+        )
+
+    # Read at most MAX+1 bytes so a huge upload can't balloon memory before the
+    # size check — len > MAX means it overflowed the cap.
+    data = await image.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="That image is too large. Please use one under 10 MB.")
+    if not data:
+        raise HTTPException(status_code=400, detail="That image was empty.")
+
+    # The header said an allowed type; confirm the bytes actually are one, and
+    # that they match the claim — blocks a mislabelled/polyglot upload.
+    sniffed = _sniff_image_type(data)
+    if sniffed is None or sniffed != image.content_type:
+        raise HTTPException(
+            status_code=415,
+            detail="That file didn't look like a JPEG, PNG, or WebP image.",
+        )
+
+    # Cap check LAST, just before the insert, to keep the window small. Two
+    # truly-simultaneous uploads could still both pass — acceptable for a
+    # single-user flow; the DB is not the enforcement point for "at most 2".
+    if await summary_model.count_images(session, summary_id) >= MAX_IMAGES_PER_SUMMARY:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A summary can have at most {MAX_IMAGES_PER_SUMMARY} photos. Remove one first.",
+        )
+
+    img = await summary_model.add_image(
+        session,
+        summary_id,
+        content_type=image.content_type,
+        filename=image.filename,
+        byte_size=len(data),
+        data=data,
+    )
+    return _image_out(img)
+
+
+@router.get("/{summary_id}/images/{image_id}/raw")
+async def get_summary_image_raw(
+    summary_id: int,
+    image_id: int,
+    user: User = Depends(require_primary),
+    session: AsyncSession = Depends(get_db),
+):
+    """GET /api/summaries/:id/images/:imageId/raw -> the image bytes.
+
+    nosniff + the stored content-type mean the browser treats the response as
+    exactly that image and never sniffs it into executable HTML."""
+    summary = await summary_model.find_by_id(session, summary_id, user.id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Summary not found")
+    img = await summary_model.find_image(session, summary_id, image_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return Response(
+        content=img.data,
+        media_type=img.content_type,
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.delete("/{summary_id}/images/{image_id}", status_code=204)
+async def delete_summary_image(
+    summary_id: int,
+    image_id: int,
+    user: User = Depends(require_primary),
+    session: AsyncSession = Depends(get_db),
+):
+    """DELETE /api/summaries/:id/images/:imageId -> 204. 404 if the image isn't
+    on a summary the caller owns."""
+    summary = await summary_model.find_by_id(session, summary_id, user.id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Summary not found")
+    if not await summary_model.delete_image(session, summary_id, image_id):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return Response(status_code=204)
+
+
 @router.patch("/{summary_id}", response_model=SummaryOut)
 async def update_summary(
     summary_id: int,
@@ -228,10 +381,21 @@ async def send_summary(
             )
         recipients.append(recipient)
 
+    # Load the summary's photos once (after validation, before the email loop)
+    # and attach the same set to every recipient's email.
+    images = await summary_model.load_images_with_data(session, summary_id)
+    attachments = [
+        {"filename": img.filename, "content": img.data, "content_type": img.content_type}
+        for img in images
+    ]
+
     try:
         for recipient in recipients:
             await send_summary_email(
-                recipient.email, summary.summary_text, from_name=user.full_name
+                recipient.email,
+                summary.summary_text,
+                from_name=user.full_name,
+                attachments=attachments,
             )
     except EmailSendError:
         # Resend outage/quota/network — same treatment as /draft's Gemini
