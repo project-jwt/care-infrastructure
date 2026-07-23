@@ -22,6 +22,7 @@ import ContactDashboard from './components/ContactDashboard';
 import PastSummaries from './components/PastSummaries';
 import TrustedContactsList from './components/TrustedContactsList';
 import HelplinePage from './components/HelplinePage';
+import ProfilePage from './components/ProfilePage';
 
 // Primary user's screens, keyed by view name. BottomNav points at
 // history/contacts/helpline; 'home' is the landing view after login.
@@ -171,17 +172,35 @@ export default function App() {
     );
   }
 
+  // The account dashboard is available to BOTH roles from the header, so it
+  // wins over the role split below. onBack returns to 'home' — which for a
+  // contact simply falls through to their ContactDashboard.
+  let content;
+  if (view === 'profile') {
+    content = (
+      <ProfilePage
+        user={user}
+        onUpdated={setUser}
+        onBack={() => setView('home')}
+        onDeleted={handleLogout}
+      />
+    );
+  } else {
+    // Contacts get one read-only screen; primaries get the view switcher.
+    content = isPrimary ? primaryScreen : <ContactDashboard user={user} />;
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <span className="app-title">J.W.T</span>
-        <button type="button" onClick={handleLogout}>Log out</button>
+        <div className="app-header__actions">
+          <button type="button" onClick={() => setView('profile')}>Profile</button>
+          <button type="button" onClick={handleLogout}>Log out</button>
+        </div>
       </header>
 
-      <div className="app-content">
-        {/* Contacts get one read-only screen; primaries get the view switcher. */}
-        {isPrimary ? primaryScreen : <ContactDashboard user={user} />}
-      </div>
+      <div className="app-content">{content}</div>
 
       {isPrimary && <BottomNav active={view} onNavigate={navigate} disabled={navLocked} />}
     </div>

@@ -46,6 +46,11 @@ input {
   font-weight: bold;
 }
 
+.app-header__actions {
+  display: flex;
+  gap: 8px;
+}
+
 .app-content {
   flex: 1;
   padding: 16px;

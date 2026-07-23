@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from db.base import Base
 from db.engine import AsyncSessionLocal, engine
 from db import seed
+from db.migrations import run_startup_migrations
 
 # Importing the models package registers every table in Base.metadata —
 # models/__init__.py imports each model module, so new models added there
@@ -26,10 +27,12 @@ from routers import auth, contacts, helplines, received_summaries, summaries, us
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Runs once at startup (before the first request): create any missing
-    # tables. Harmless if they already exist; ALTERing changed tables is a
-    # migration-tool job (Alembic, later).
+    # tables, then apply hand-rolled migrations for schema changes create_all
+    # can't make to already-existing tables (see db/migrations.py). Both share
+    # one transaction.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await run_startup_migrations(conn)
     # Reference rows (the pre-loaded helplines) — idempotent, so restarts
     # and redeploys never duplicate anything. Data lives in db/seed.py.
     async with AsyncSessionLocal() as session:
