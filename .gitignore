@@ -222,3 +222,15 @@ node_modules/
 dist/
 frontend/.env
 frontend/.env.local
+
+# OS / editor / local tooling cruft
+.DS_Store
+.cursor/
+.windsurfrules
+.superdesign/
+
+# Local AI planning / spec docs and browser-test artifacts (kept local)
+docs/superpowers/
+.playwright-mcp/
+CLAUDE.md
+HANDOFF.md
