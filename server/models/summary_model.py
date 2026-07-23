@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
+from models.contact_model import TrustedContactLink
 from models.user_model import User
 
 
@@ -217,11 +218,20 @@ async def list_recipients_for_summary(
     """Everyone a summary was sent to, oldest send first — the sender's
     delivery receipt (GET /api/summaries/:id/recipients).
 
-    outerjoin (LEFT JOIN) to users so a recipient who has since deleted their
-    account still returns a row: contact_id and full_name come back NULL (the
-    receipt was preserved by ON DELETE SET NULL), which the frontend shows as
-    "Deleted user". Only id + name are selected — the full users row
-    (password_hash) never enters the query, same as list_received_for_contact.
+    The name shown is the label the SENDER saved the contact under (the
+    nickname on their trusted-contact link, e.g. "Mom"), not the contact's
+    own account name — that's how contacts are named everywhere else in the
+    app (see frontend displayName). full_name comes back too as the fallback
+    for a contact the sender never nicknamed.
+
+    Two outerjoins (LEFT JOINs) so a recipient who has since deleted their
+    account still returns a row: contact_id, full_name and nickname all come
+    back NULL (the receipt was preserved by ON DELETE SET NULL), which the
+    frontend shows as "Deleted user". The nickname is scoped to THIS summary's
+    owner via the join to summaries — a contact_id can be trusted by more than
+    one primary, so the link is matched on (owner_id, contact_id). Only id +
+    names are selected — the full users row (password_hash) never enters the
+    query, same as list_received_for_contact.
 
     Scoping: the CALLER checks the summary belongs to the primary (the router
     does, via find_by_id) before calling this — here we filter only by
@@ -231,9 +241,16 @@ async def list_recipients_for_summary(
         select(
             SummaryRecipient.contact_id,
             User.full_name,
+            TrustedContactLink.nickname,
             SummaryRecipient.sent_at,
         )
+        .join(Summary, Summary.id == SummaryRecipient.summary_id)
         .outerjoin(User, User.id == SummaryRecipient.contact_id)
+        .outerjoin(
+            TrustedContactLink,
+            (TrustedContactLink.contact_id == SummaryRecipient.contact_id)
+            & (TrustedContactLink.owner_id == Summary.user_id),
+        )
         .where(SummaryRecipient.summary_id == summary_id)
         .order_by(SummaryRecipient.sent_at.asc(), SummaryRecipient.id.asc())
     )

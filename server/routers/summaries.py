@@ -150,7 +150,12 @@ async def list_summary_recipients(
 
     rows = await summary_model.list_recipients_for_summary(session, summary_id)
     return [
-        RecipientOut(contact_id=r.contact_id, full_name=r.full_name, sent_at=r.sent_at)
+        RecipientOut(
+            contact_id=r.contact_id,
+            nickname=r.nickname,
+            full_name=r.full_name,
+            sent_at=r.sent_at,
+        )
         for r in rows
     ]
 
