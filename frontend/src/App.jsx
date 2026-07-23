@@ -13,8 +13,8 @@ import { logout } from './adapters/auth-adapters';
 import { getMe } from './adapters/users-adapters';
 import LandingPage from './components/LandingPage';
 import LoginRegisterPage from './components/LoginRegisterPage';
+import SetupTutorial from './components/SetupTutorial';
 import BottomNav from './components/BottomNav';
-import PrimaryHome from './components/PrimaryHome';
 import RecordingPage from './components/RecordingPage';
 import SummaryReview from './components/SummaryReview';
 import ChooseAction from './components/ChooseAction';
@@ -24,10 +24,11 @@ import TrustedContactsList from './components/TrustedContactsList';
 import HelplinePage from './components/HelplinePage';
 import ProfilePage from './components/ProfilePage';
 
-// Primary user's screens, keyed by view name. BottomNav points at
-// history/contacts/helpline; 'home' is the landing view after login.
+// Primary user's simple screens, keyed by view name (BottomNav's
+// history/contacts/helpline). 'home' is the landing view — it renders the
+// speak/record screen (see primaryScreen below) rather than living here,
+// because that screen needs per-flow props the uniform map can't express.
 const VIEWS = {
-  home: PrimaryHome,
   history: PastSummaries,
   contacts: TrustedContactsList,
   helpline: HelplinePage,
@@ -52,6 +53,9 @@ export default function App() {
   // True while ChooseAction has a send in flight — freezes BottomNav so the
   // request's outcome can't be lost to a mid-send navigation.
   const [navLocked, setNavLocked] = useState(false);
+  // Set when the user re-opens the walkthrough from Profile — an on-demand
+  // replay that runs the same modal without the first-login gate below.
+  const [replayOpen, setReplayOpen] = useState(false);
 
   // On first load: if a token survived a refresh, ask the backend who it
   // belongs to. Only an explicit rejection (401/403 = expired, forged, user
@@ -116,25 +120,21 @@ export default function App() {
   }
 
   const isPrimary = user.role === 'primary';
-  const CurrentView = VIEWS[view] ?? PrimaryHome;
+
+  // First-login walkthrough (spec §MVP 6): auto-opens once for a primary user
+  // who hasn't completed setup. `replayOpen` reruns the same modal on demand
+  // from Profile. Contacts have no onboarding (login → dashboard). The modal
+  // is self-contained, so it no longer forces a particular view behind it.
+  const firstRun = isPrimary && !user.hasCompletedSetup;
+  const showTutorial = firstRun || replayOpen;
 
   // The speak → review → choose-action flow hands per-flow state between
   // steps (transcript, then the saved summary's id), which the uniform VIEWS
-  // map (user/onNavigate only) can't express — so those three screens render
-  // explicitly instead of living in the map.
+  // map (user/onNavigate only) can't express — so those screens render
+  // explicitly. 'home' lands on the speak/record screen (the app's primary
+  // action); unknown views fall through to it too.
   let primaryScreen;
-  if (view === 'recording') {
-    primaryScreen = (
-      <RecordingPage
-        onBack={() => setView('home')}
-        onContinue={({ transcript: nextTranscript, summaryText: nextSummary }) => {
-          setTranscript(nextTranscript);
-          setSummaryText(nextSummary);
-          setView('review');
-        }}
-      />
-    );
-  } else if (view === 'review') {
+  if (view === 'review') {
     primaryScreen = (
       <SummaryReview
         user={user}
@@ -157,7 +157,8 @@ export default function App() {
         onBusyChange={setNavLocked}
       />
     );
-  } else {
+  } else if (VIEWS[view]) {
+    const CurrentView = VIEWS[view];
     primaryScreen = (
       <CurrentView
         user={user}
@@ -167,6 +168,18 @@ export default function App() {
         onSendSummary={(id) => {
           setSavedSummaryId(id);
           setView('choose-action');
+        }}
+      />
+    );
+  } else {
+    // 'home' (and any unrecognised view) — the speak/record screen is the
+    // landing view, so it has no Back button.
+    primaryScreen = (
+      <RecordingPage
+        onContinue={({ transcript: nextTranscript, summaryText: nextSummary }) => {
+          setTranscript(nextTranscript);
+          setSummaryText(nextSummary);
+          setView('review');
         }}
       />
     );
@@ -183,6 +196,8 @@ export default function App() {
         onUpdated={setUser}
         onBack={() => setView('home')}
         onDeleted={handleLogout}
+        // Primaries can replay the walkthrough from here; contacts have none.
+        onReplayTutorial={isPrimary ? () => setReplayOpen(true) : undefined}
       />
     );
   } else {
@@ -191,18 +206,38 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <span className="app-title">J.W.T</span>
-        <div className="app-header__actions">
-          <button type="button" onClick={() => setView('profile')}>Profile</button>
-          <button type="button" onClick={handleLogout}>Log out</button>
-        </div>
-      </header>
+    <>
+      {/* inert while the tour runs: the modal already blocks pointer events,
+          but only inert keeps keyboard focus from Tabbing into the page
+          underneath (Enter on Log out or a nav tab would act through the
+          tour). '' not a boolean — React 18 renders `inert={false}` as a
+          present (and therefore active) attribute. */}
+      <div className="app-shell" inert={showTutorial ? '' : undefined}>
+        <header className="app-header">
+          <span className="app-title">J.W.T</span>
+          <div className="app-header__actions">
+            <button type="button" onClick={() => setView('profile')}>Profile</button>
+            <button type="button" onClick={handleLogout}>Log out</button>
+          </div>
+        </header>
 
-      <div className="app-content">{content}</div>
+        <div className="app-content">{content}</div>
 
-      {isPrimary && <BottomNav active={view} onNavigate={navigate} disabled={navLocked} />}
-    </div>
+        {isPrimary && <BottomNav active={view} onNavigate={navigate} disabled={navLocked} />}
+      </div>
+
+      {/* Outside the shell so the inert above can't swallow the tour itself. */}
+      {showTutorial && (
+        <SetupTutorial
+          firstRun={firstRun}
+          onFinish={() => {
+            // First run persists completion so it won't auto-open again; a
+            // replay just closes (already complete — no redundant PATCH).
+            if (firstRun) setUser((u) => ({ ...u, hasCompletedSetup: true }));
+            setReplayOpen(false);
+          }}
+        />
+      )}
+    </>
   );
 }

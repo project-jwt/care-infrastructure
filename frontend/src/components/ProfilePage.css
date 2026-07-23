@@ -131,6 +131,15 @@
   color: #6e2c00; /* same error tone as HelplinePage */
 }
 
+/* --- Help / replay walkthrough --- */
+
+.profile__help-note {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5;
+  color: #2e4053;
+}
+
 /* --- Danger zone --- */
 
 .profile__danger-note {

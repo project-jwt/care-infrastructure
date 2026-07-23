@@ -8,6 +8,8 @@
 // It owns only form state; the source-of-truth user lives in App and is
 // refreshed via onUpdated after a successful save. onDeleted hands control back
 // to App to clear the session. onBack returns to the previous screen.
+// onReplayTutorial re-opens the first-login walkthrough; App passes it only for
+// primary users (contacts have no onboarding), so the card is hidden otherwise.
 
 import { useState } from 'react';
 import { updateMe, deleteMe } from '../adapters/users-adapters';
@@ -15,7 +17,7 @@ import './ProfilePage.css';
 
 const ROLE_LABELS = { primary: 'Primary account', contact: 'Trusted contact' };
 
-export default function ProfilePage({ user, onUpdated, onBack, onDeleted }) {
+export default function ProfilePage({ user, onUpdated, onBack, onDeleted, onReplayTutorial }) {
   // --- Update: name + email ---
   const [fullName, setFullName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
@@ -150,6 +152,20 @@ export default function ProfilePage({ user, onUpdated, onBack, onDeleted }) {
           </div>
         </dl>
       </section>
+
+      {/* Replay the first-login walkthrough. Only rendered when App supplies
+          the handler (primary users); contacts have no onboarding. */}
+      {onReplayTutorial && (
+        <section className="profile__card" aria-labelledby="profile-help-h">
+          <h2 id="profile-help-h" className="profile__card-title">How to use this app</h2>
+          <p className="profile__help-note">
+            New here, or want a refresher? Watch the quick walkthrough again.
+          </p>
+          <button type="button" className="profile__save" onClick={onReplayTutorial}>
+            Show the tutorial again
+          </button>
+        </section>
+      )}
 
       {/* Update: name + email */}
       <section className="profile__card" aria-labelledby="profile-details-h">
