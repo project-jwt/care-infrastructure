@@ -12,8 +12,11 @@
 // which isn't needed here (the token scopes the request to the logged-in
 // contact).
 
-import { useEffect, useState } from 'react';
-import { listReceivedSummaries } from '../adapters/received-summaries-adapters';
+import { useEffect, useRef, useState } from 'react';
+import {
+  getReceivedSummaryImageBlob,
+  listReceivedSummaries,
+} from '../adapters/received-summaries-adapters';
 import { formatDate } from '../utils';
 import './ContactDashboard.css';
 
@@ -21,6 +24,15 @@ export default function ContactDashboard() {
   const [items, setItems] = useState(null); // null = still loading
   const [loadError, setLoadError] = useState(null);
   const [selected, setSelected] = useState(null); // open summary, null = list mode
+
+  // Object URLs for the open summary's photos (imageId -> URL), tracked in a
+  // ref so they can be revoked when the summary changes or the screen unmounts.
+  const [imageUrls, setImageUrls] = useState({});
+  const objectUrls = useRef([]);
+  const revokeImageUrls = () => {
+    objectUrls.current.forEach((u) => URL.revokeObjectURL(u));
+    objectUrls.current = [];
+  };
 
   // Named (not inline in the effect) so the load-error Try Again button can
   // re-run it. Resetting to the loading state first makes the retry visible.
@@ -35,6 +47,35 @@ export default function ContactDashboard() {
   useEffect(() => {
     load();
   }, []);
+
+  // When a summary opens, fetch its photos' bytes (each behind auth) and turn
+  // them into object URLs. Revokes the previous set first; the list-item
+  // payload already carries the image metadata.
+  useEffect(() => {
+    let cancelled = false;
+    revokeImageUrls();
+    setImageUrls({});
+    if (selected?.images?.length) {
+      (async () => {
+        const urls = {};
+        for (const img of selected.images) {
+          const { data: blob } = await getReceivedSummaryImageBlob(selected.summaryId, img.id);
+          if (blob && !cancelled) {
+            const url = URL.createObjectURL(blob);
+            urls[img.id] = url;
+            objectUrls.current.push(url);
+          }
+        }
+        if (!cancelled) setImageUrls(urls);
+      })();
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  // Revoke any outstanding URLs when the screen unmounts.
+  useEffect(() => revokeImageUrls, []);
 
   // ── detail mode ───────────────────────────────────────────────────────────
 
@@ -57,6 +98,28 @@ export default function ContactDashboard() {
         {/* pre-line — the same rendering History gives the sender, so both
             sides see identical layout of identical text. */}
         <p className="contact-dashboard__text">{selected.summaryText}</p>
+
+        {/* Photos the sender attached — read-only on this side. */}
+        {selected.images?.length > 0 && (
+          <section className="contact-dashboard__photos" aria-labelledby="cd-photos-h">
+            <h2 id="cd-photos-h" className="contact-dashboard__photos-heading">Photos</h2>
+            <ul className="contact-dashboard__photo-list">
+              {selected.images.map((img) => (
+                <li key={img.id} className="contact-dashboard__photo">
+                  {imageUrls[img.id] ? (
+                    <img
+                      className="contact-dashboard__photo-img"
+                      src={imageUrls[img.id]}
+                      alt={img.filename || 'Attached photo'}
+                    />
+                  ) : (
+                    <span className="contact-dashboard__photo-fallback">Loading photo&hellip;</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
     );
   }

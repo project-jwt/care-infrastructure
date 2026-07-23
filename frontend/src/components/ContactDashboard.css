@@ -138,3 +138,48 @@
   outline: 3px solid #1a5276;
   outline-offset: 3px;
 }
+
+/* --- Photos the sender attached (read-only) --- */
+
+.contact-dashboard__photos {
+  width: 100%;
+  text-align: left;
+}
+
+.contact-dashboard__photos-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 1rem 0 0.5rem;
+  color: #1c2833;
+}
+
+.contact-dashboard__photo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.contact-dashboard__photo-img {
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  border: 2px solid #85929e;
+  border-radius: 0.5rem;
+}
+
+.contact-dashboard__photo-fallback {
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.5rem;
+  border: 2px dashed #85929e;
+  border-radius: 0.5rem;
+  color: #5d6d7e;
+  font-size: 0.95rem;
+}

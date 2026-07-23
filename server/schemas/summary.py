@@ -121,6 +121,19 @@ class RecipientOut(CamelModel):
     sent_at: datetime
 
 
+class ImageOut(CamelModel):
+    """One image's metadata — no bytes. Returned by the primary's image
+    endpoints and embedded in each received-summary item. The bytes are fetched
+    separately from the matching /raw endpoint:
+      { id, filename, contentType, byteSize, createdAt }"""
+
+    id: int
+    filename: str | None
+    content_type: str
+    byte_size: int
+    created_at: datetime
+
+
 class SummarySender(CamelModel):
     """The `from` object on a received summary: { id, fullName } — the
     primary user who sent it, and nothing more (no email, no role)."""
@@ -131,14 +144,18 @@ class SummarySender(CamelModel):
 
 class ReceivedSummaryOut(CamelModel):
     """List-item response for GET /api/received-summaries:
-    { summaryId, summaryText, sentAt, from: { id, fullName } }
+    { summaryId, summaryText, sentAt, from: { id, fullName }, images: [...] }
 
     `from` is a Python keyword, so the field is from_ with an explicit alias
     (to_camel would produce "from_", not "from"). CamelModel's
     populate_by_name lets the router construct it as from_=..., and FastAPI
-    serializes by alias, so the JSON key comes out as plain "from"."""
+    serializes by alias, so the JSON key comes out as plain "from".
+
+    images is the summary's CURRENT attachments (metadata only) — the contact
+    fetches each one's bytes from the received-summaries /raw endpoint."""
 
     summary_id: int
     summary_text: str
     sent_at: datetime
     from_: SummarySender = Field(alias="from")
+    images: list[ImageOut] = []

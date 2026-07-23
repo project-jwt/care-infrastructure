@@ -51,3 +51,21 @@ export const handleFetch = async (url, options = {}) => {
     return { data: null, error: { status: 0, message: 'Could not reach the server' } };
   }
 };
+
+// Fetches a binary body (an image's bytes) with the JWT attached, returning
+// { data: Blob, error }. Images live behind auth, so an <img src> to the
+// endpoint would 401 — callers turn the Blob into an object URL instead.
+export const getBlob = async (url) => {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      return { data: null, error: { status: response.status, message: 'Could not load image' } };
+    }
+    return { data: await response.blob(), error: null };
+  } catch {
+    return { data: null, error: { status: 0, message: 'Could not reach the server' } };
+  }
+};

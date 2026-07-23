@@ -82,11 +82,13 @@ async def test_inbox_shape_and_newest_first(client, sessions):
     # Newest send first.
     assert [item["summaryId"] for item in data] == [newer_id, older_id]
 
-    # Exact contract shape — no extra keys, no transcript, from is {id, fullName}.
+    # Exact contract shape — no transcript, from is {id, fullName}. images is
+    # part of the contract now (empty here — nothing attached to these).
     first = data[0]
-    assert set(first) == {"summaryId", "summaryText", "sentAt", "from"}
+    assert set(first) == {"summaryId", "summaryText", "sentAt", "from", "images"}
     assert first["summaryText"] == "newer one"
     assert first["from"] == {"id": sender_id, "fullName": "Sender Name"}
+    assert first["images"] == []
 
     # The sender's private fields must never appear anywhere in the payload.
     assert "sender@example.com" not in resp.text
