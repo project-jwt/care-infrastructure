@@ -9,6 +9,7 @@ export const formatDate = (iso) =>
     year: 'numeric',
   });
 
-// What we call a person: their nickname if one was set, else their
-// registered full name.
-export const displayName = (c) => c.nickname || c.fullName;
+// What we call a person: their nickname if one was set, else their registered
+// full name, else their email — an INVITED contact has no fullName yet, so
+// without the last step a nickname-less invite renders as a blank row.
+export const displayName = (c) => c.nickname || c.fullName || c.email;
