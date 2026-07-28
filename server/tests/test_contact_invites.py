@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from core.security import create_access_token
-from models import contact_model, invite_model
+from models import contact_model, invite_model, user_model
 from models.invite_model import ContactInvite
 from models.user_model import User
 
@@ -636,3 +636,133 @@ async def test_invite_endpoints_404_once_accepted(client, sessions):
         assert still_there is not None
         assert still_there.id == invite_id
         assert still_there.accepted_at is not None
+
+
+# ── acceptance on registration ────────────────────────────────────────────────
+
+
+async def test_registering_as_a_contact_accepts_the_invite(client, sessions):
+    async with sessions() as s:
+        owner = await _user(s, email="host@example.com")
+        await s.commit()
+        await invite_model.create(s, owner.id, "newbie@example.com", "Kid", "son")
+        await s.commit()
+
+    res = await client.post(
+        "/api/auth/register",
+        json={
+            "email": "newbie@example.com",
+            "password": "hunter2hunter2",
+            "fullName": "New Bie",
+            "role": "contact",
+        },
+    )
+    assert res.status_code == 201
+
+    # The greyed invite is now a real, usable contact — same list, new status.
+    listed = await client.get("/api/contacts", headers=_auth(owner))
+    rows = listed.json()
+    assert [r["status"] for r in rows] == ["active"]
+    assert rows[0]["fullName"] == "New Bie"
+    assert rows[0]["nickname"] == "Kid"          # labels carried across
+    assert rows[0]["relationship"] == "son"
+    assert rows[0]["contactId"] is not None      # now sendable
+
+
+async def test_registering_as_a_primary_does_not_accept_the_invite(client, sessions):
+    async with sessions() as s:
+        owner = await _user(s, email="host2@example.com")
+        await s.commit()
+        await invite_model.create(s, owner.id, "wrongrole@example.com", None, None)
+        await s.commit()
+
+    res = await client.post(
+        "/api/auth/register",
+        json={
+            "email": "wrongrole@example.com",
+            "password": "hunter2hunter2",
+            "fullName": "Wrong Role",
+            "role": "primary",
+        },
+    )
+    assert res.status_code == 201
+
+    listed = await client.get("/api/contacts", headers=_auth(owner))
+    assert [r["status"] for r in listed.json()] == ["invited"]
+
+    # Strengthened beyond the brief: the list view alone wouldn't distinguish
+    # "invite still pending" from "invite was deleted and something else in
+    # the response happens to read as invited" (it wouldn't here, since an
+    # empty list fails the assert above too, but this pins the actual model
+    # state directly, the same way test_invite_endpoints_404_once_accepted
+    # does elsewhere in this file). A bug that deleted the invite outright,
+    # or one that flipped accepted_at despite the role guard, must fail here.
+    async with sessions() as s:
+        still_there = await invite_model.find_any(s, owner.id, "wrongrole@example.com")
+        assert still_there is not None
+        assert still_there.accepted_at is None
+
+
+async def test_acceptance_links_every_inviter_at_once(client, sessions):
+    async with sessions() as s:
+        a = await _user(s, email="h1@example.com")
+        b = await _user(s, email="h2@example.com")
+        await s.commit()
+        await invite_model.create(s, a.id, "popular@example.com", None, None)
+        await invite_model.create(s, b.id, "popular@example.com", None, None)
+        await s.commit()
+
+    res = await client.post(
+        "/api/auth/register",
+        json={
+            "email": "popular@example.com",
+            "password": "hunter2hunter2",
+            "fullName": "Pop U Lar",
+            "role": "contact",
+        },
+    )
+    assert res.status_code == 201
+
+    # Collect both owners' statuses before asserting on either — a bug that
+    # only links ONE of the two inviters must not get to hide behind pytest
+    # stopping at the first failed assert; both lists are actually inspected.
+    statuses = {}
+    for owner in (a, b):
+        listed = await client.get("/api/contacts", headers=_auth(owner))
+        statuses[owner.email] = [r["status"] for r in listed.json()]
+
+    assert statuses == {
+        "h1@example.com": ["active"],
+        "h2@example.com": ["active"],
+    }
+
+
+async def test_registration_still_succeeds_when_acceptance_blows_up(
+    client, sessions, monkeypatch
+):
+    """A stale invite must never stop someone from creating an account."""
+
+    async def boom(session, user):
+        raise RuntimeError("invite conversion exploded")
+
+    monkeypatch.setattr("routers.auth.invite_model.accept_for_user", boom)
+
+    res = await client.post(
+        "/api/auth/register",
+        json={
+            "email": "resilient@example.com",
+            "password": "hunter2hunter2",
+            "fullName": "Res Ilient",
+            "role": "contact",
+        },
+    )
+    assert res.status_code == 201
+    assert res.json()["token"]
+
+    # Strengthened beyond the brief: a truthy token alone doesn't prove the
+    # account was actually persisted (a bug could mint a token for a user
+    # that never got committed). Confirm the row is really there.
+    async with sessions() as s:
+        created = await user_model.find_by_email(s, "resilient@example.com")
+        assert created is not None
+        assert created.full_name == "Res Ilient"
