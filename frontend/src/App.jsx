@@ -42,6 +42,9 @@ export default function App() {
   // then a CTA reveals the login/register form in the requested mode.
   const [authView, setAuthView] = useState('landing'); // 'landing' | 'auth'
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  // Seeded from an invitation link so the invitee lands on a register form
+  // with their email filled in and the contact role already chosen.
+  const [invitePrefill, setInvitePrefill] = useState(null); // { email, role }
   // Carried from the recording step to the review step (speak → review flow):
   // the raw transcript and the AI-drafted summary the user will edit/approve.
   const [transcript, setTranscript] = useState('');
@@ -76,6 +79,19 @@ export default function App() {
       setChecking(false);
     };
     restoreSession();
+  }, []);
+
+  // An invitation link is ?invite=contact&email=… on the app root — query
+  // params, not a path, because there's no router here and any other path
+  // falls through to the server's static catch-all.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('invite') !== 'contact') return;
+    setInvitePrefill({ email: params.get('email') || '', role: 'contact' });
+    setAuthMode('register');
+    setAuthView('auth');
+    // Drop the params so a refresh (or a later login) doesn't re-open this.
+    window.history.replaceState({}, '', window.location.pathname);
   }, []);
 
   const handleAuth = (loggedInUser) => {
@@ -115,6 +131,8 @@ export default function App() {
         onAuth={handleAuth}
         initialMode={authMode}
         onBack={() => setAuthView('landing')}
+        initialEmail={invitePrefill?.email || ''}
+        initialRole={invitePrefill?.role || 'primary'}
       />
     );
   }

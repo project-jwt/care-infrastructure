@@ -6,12 +6,21 @@
 import { useState } from 'react';
 import { login, register } from '../adapters/auth-adapters';
 
-export default function LoginRegisterPage({ onAuth, initialMode = 'login', onBack }) {
+export default function LoginRegisterPage({
+  onAuth,
+  initialMode = 'login',
+  onBack,
+  // Seeded from an invitation link (?invite=contact&email=…) so the invitee
+  // doesn't retype the address the invite was sent to — acceptance matches on
+  // email, so a typo here would silently fail to link them.
+  initialEmail = '',
+  initialRole = 'primary',
+}) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState('primary'); // 'primary' | 'contact'
+  const [role, setRole] = useState(initialRole); // 'primary' | 'contact'
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
