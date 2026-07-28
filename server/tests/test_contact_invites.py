@@ -186,3 +186,64 @@ async def test_accept_for_user_skips_an_existing_link(session):
     assert await invite_model.accept_for_user(session, contact) == 1
     links = await contact_model.list_by_owner(session, owner.id)
     assert len(links) == 1  # not two
+
+
+# ── GET /api/contacts (merged list) ───────────────────────────────────────────
+
+
+async def test_list_returns_active_contacts_before_pending_invites(client, sessions):
+    async with sessions() as s:
+        owner = await _user(s, email="own@example.com", full_name="Owner")
+        contact = await _user(
+            s, email="real@example.com", full_name="Real Person", role="contact"
+        )
+        await s.commit()
+        await contact_model.create(s, owner.id, contact.id, "Bestie", "friend")
+        await invite_model.create(s, owner.id, "waiting@example.com", "Kid", "son")
+        await s.commit()
+
+    res = await client.get("/api/contacts", headers=_auth(owner))
+    assert res.status_code == 200
+    rows = res.json()
+    assert [r["status"] for r in rows] == ["active", "invited"]
+
+    active, invited = rows
+    assert active["contactId"] == contact.id
+    assert active["fullName"] == "Real Person"
+    assert active["linkId"] is not None
+    assert active["inviteId"] is None
+    assert active["invitedAt"] is None
+
+    assert invited["email"] == "waiting@example.com"
+    assert invited["nickname"] == "Kid"
+    assert invited["relationship"] == "son"
+    assert invited["inviteId"] is not None
+    assert invited["invitedAt"] is not None
+    # Nobody has typed this person's name yet — the UI falls back to the email.
+    assert invited["fullName"] is None
+    assert invited["contactId"] is None
+    assert invited["linkId"] is None
+
+
+async def test_list_hides_another_owners_invites(client, sessions):
+    async with sessions() as s:
+        a = await _user(s, email="la@example.com")
+        b = await _user(s, email="lb@example.com")
+        await s.commit()
+        await invite_model.create(s, a.id, "secret@example.com", None, None)
+        await s.commit()
+
+    res = await client.get("/api/contacts", headers=_auth(b))
+    assert res.json() == []
+
+
+async def test_list_hides_accepted_invites(client, sessions):
+    async with sessions() as s:
+        owner = await _user(s, email="acc2@example.com")
+        await s.commit()
+        invite = await invite_model.create(s, owner.id, "gone@example.com", None, None)
+        invite.accepted_at = datetime.now(timezone.utc)
+        await s.commit()
+
+    res = await client.get("/api/contacts", headers=_auth(owner))
+    assert res.json() == []

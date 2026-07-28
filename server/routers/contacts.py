@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies.auth import require_primary
 from dependencies.db import get_db
-from models import contact_model, user_model
+from models import contact_model, invite_model, user_model
 from models.user_model import User
-from schemas.contact import ContactCreate, ContactOut, ContactUpdate
+from schemas.contact import ContactCreate, ContactOut, ContactUpdate, InviteUpdate
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -22,6 +22,7 @@ router = APIRouter(prefix="/contacts", tags=["contacts"])
 def _to_out(link, contact_user) -> ContactOut:
     """Compose the contract's response shape from a (link, users) join pair."""
     return ContactOut(
+        status="active",
         link_id=link.id,
         contact_id=contact_user.id,
         full_name=contact_user.full_name,
@@ -31,14 +32,35 @@ def _to_out(link, contact_user) -> ContactOut:
     )
 
 
+def _invite_out(invite) -> ContactOut:
+    """The same response shape for a pending invitation. No contactId and no
+    fullName exist yet — that's what status="invited" tells the client."""
+    return ContactOut(
+        status="invited",
+        email=invite.email,
+        nickname=invite.nickname,
+        relationship=invite.relationship,
+        invite_id=invite.id,
+        invited_at=invite.created_at,
+    )
+
+
 @router.get("", response_model=list[ContactOut])
 async def list_contacts(
     user: User = Depends(require_primary),
     session: AsyncSession = Depends(get_db),
 ):
-    """GET /api/contacts -> the current primary user's trusted contacts."""
+    """GET /api/contacts -> the current primary user's trusted contacts,
+    followed by the people they've invited who haven't registered yet.
+
+    Active first on purpose: greyed-out invitations must never push usable
+    contacts down the screen.
+    """
     rows = await contact_model.list_by_owner(session, user.id)
-    return [_to_out(link, contact_user) for link, contact_user in rows]
+    invites = await invite_model.list_pending_by_owner(session, user.id)
+    return [_to_out(link, contact_user) for link, contact_user in rows] + [
+        _invite_out(invite) for invite in invites
+    ]
 
 
 @router.post("", response_model=ContactOut, status_code=201)
