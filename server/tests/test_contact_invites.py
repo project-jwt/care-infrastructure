@@ -516,3 +516,123 @@ async def test_a_contact_role_user_cannot_invite(client, sessions, invites_sent)
     )
     assert res.status_code == 403
     assert invites_sent == []
+
+
+# ── invite endpoints ──────────────────────────────────────────────────────────
+
+
+async def test_patch_invite_updates_labels(client, sessions):
+    async with sessions() as s:
+        owner = await _user(s, email="pi@example.com")
+        await s.commit()
+        invite = await invite_model.create(s, owner.id, "e@example.com", "Old", "old")
+        await s.commit()
+        invite_id = invite.id
+
+    res = await client.patch(
+        f"/api/contacts/invites/{invite_id}",
+        json={"nickname": "Newer"},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 200
+    assert res.json()["nickname"] == "Newer"
+    # exclude_unset: an omitted field is left alone, not nulled.
+    assert res.json()["relationship"] == "old"
+
+    listed = await client.get("/api/contacts", headers=_auth(owner))
+    assert listed.json()[0]["nickname"] == "Newer"
+
+
+async def test_resend_sends_again_then_throttles(client, sessions, invites_sent):
+    async with sessions() as s:
+        owner = await _user(s, email="rs@example.com", full_name="Re Sender")
+        await s.commit()
+        invite = await invite_model.create(s, owner.id, "again@example.com", None, None)
+        # Backdate the last send so the first resend is allowed.
+        invite.last_sent_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        await s.commit()
+        invite_id = invite.id
+
+    first = await client.post(
+        f"/api/contacts/invites/{invite_id}/resend", headers=_auth(owner)
+    )
+    assert first.status_code == 200
+    assert len(invites_sent) == 1
+    assert invites_sent[0][0] == "again@example.com"
+    assert invites_sent[0][1] == "Re Sender"
+
+    second = await client.post(
+        f"/api/contacts/invites/{invite_id}/resend", headers=_auth(owner)
+    )
+    assert second.status_code == 429
+    assert len(invites_sent) == 1  # no second email
+
+
+async def test_cancel_invite_removes_it_from_the_list(client, sessions):
+    async with sessions() as s:
+        owner = await _user(s, email="cx@example.com")
+        await s.commit()
+        invite = await invite_model.create(s, owner.id, "bye@example.com", None, None)
+        await s.commit()
+        invite_id = invite.id
+
+    res = await client.delete(f"/api/contacts/invites/{invite_id}", headers=_auth(owner))
+    assert res.status_code == 200
+    assert res.json()["message"] == "Invitation cancelled"
+
+    listed = await client.get("/api/contacts", headers=_auth(owner))
+    assert listed.json() == []
+
+
+async def test_invite_endpoints_are_owner_scoped(client, sessions, invites_sent):
+    async with sessions() as s:
+        a = await _user(s, email="oa@example.com")
+        b = await _user(s, email="ob@example.com")
+        await s.commit()
+        invite = await invite_model.create(s, a.id, "mine@example.com", None, None)
+        await s.commit()
+        invite_id = invite.id
+
+    for call in (
+        client.patch(
+            f"/api/contacts/invites/{invite_id}", json={"nickname": "x"}, headers=_auth(b)
+        ),
+        client.post(f"/api/contacts/invites/{invite_id}/resend", headers=_auth(b)),
+        client.delete(f"/api/contacts/invites/{invite_id}", headers=_auth(b)),
+    ):
+        res = await call
+        assert res.status_code == 404
+        assert res.json()["message"] == "Invitation not found"
+    assert invites_sent == []
+
+    # Prove the invite is untouched by b's rejected calls, not merely absent:
+    # a can still see, resend, and edit it. If owner_id were ignored, b's
+    # patch/delete above would have silently mutated or removed this row.
+    async with sessions() as s:
+        still_there = await invite_model.find_any(s, a.id, "mine@example.com")
+        assert still_there is not None
+        assert still_there.id == invite_id
+        assert still_there.accepted_at is None
+
+
+async def test_invite_endpoints_404_once_accepted(client, sessions):
+    async with sessions() as s:
+        owner = await _user(s, email="oncedone@example.com")
+        await s.commit()
+        invite = await invite_model.create(s, owner.id, "done@example.com", None, None)
+        invite.accepted_at = datetime.now(timezone.utc)
+        await s.commit()
+        invite_id = invite.id
+
+    res = await client.delete(f"/api/contacts/invites/{invite_id}", headers=_auth(owner))
+    assert res.status_code == 404
+
+    # The 404 must come from "not pending", not from the row being gone —
+    # otherwise this test would equally pass against a delete that (wrongly)
+    # ignores acceptance and just always 404s, or one that races and deletes
+    # the row anyway despite reporting 404.
+    async with sessions() as s:
+        still_there = await invite_model.find_any(s, owner.id, "done@example.com")
+        assert still_there is not None
+        assert still_there.id == invite_id
+        assert still_there.accepted_at is not None

@@ -202,6 +202,73 @@ async def add_contact(
     return _to_out(link, contact_user)
 
 
+# ── Pending invitations ───────────────────────────────────────────────────────
+# All three take an invite_id, not a link_id — those are independent sequences,
+# so reusing /contacts/{id} would be ambiguous and could mutate the wrong row.
+# They also all require the invite to still be PENDING: once accepted, the
+# durable record is the link, edited via /api/contacts/{linkId}.
+#
+# (No route-order hazard with /{link_id} below, unlike summaries.py's /draft —
+# these paths have two extra segments, so no literal is shadowed by the int
+# path param.)
+
+
+@router.patch("/invites/{invite_id}", response_model=ContactOut)
+async def update_invite(
+    invite_id: int,
+    body: InviteUpdate,
+    user: User = Depends(require_primary),
+    session: AsyncSession = Depends(get_db),
+):
+    """PATCH /api/contacts/invites/:inviteId  { nickname?, relationship? }.
+    The labels survive onto the link when the invitee registers."""
+    fields = body.model_dump(exclude_unset=True)
+    invite = await invite_model.update_pending(session, invite_id, user.id, **fields)
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    return _invite_out(invite)
+
+
+@router.post("/invites/{invite_id}/resend", response_model=ContactOut)
+async def resend_invite(
+    invite_id: int,
+    user: User = Depends(require_primary),
+    session: AsyncSession = Depends(get_db),
+):
+    """POST /api/contacts/invites/:inviteId/resend -> the invitation again.
+
+    429 inside the cooldown. Email first, then stamp last_sent_at, so a
+    provider failure doesn't consume the user's next attempt.
+    """
+    invite = await invite_model.find_pending(session, invite_id, user.id)
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    # as_utc: SQLite hands this back naive, Postgres aware (see invite_model).
+    if invite_model.as_utc(invite.last_sent_at) > datetime.now(timezone.utc) - RESEND_COOLDOWN:
+        raise HTTPException(
+            status_code=429,
+            detail="We sent that invitation recently. Please try again later.",
+        )
+
+    await _send_invite(user, invite.email)
+    await invite_model.touch_sent(session, invite)
+    return _invite_out(invite)
+
+
+@router.delete("/invites/{invite_id}")
+async def cancel_invite(
+    invite_id: int,
+    user: User = Depends(require_primary),
+    session: AsyncSession = Depends(get_db),
+):
+    """DELETE /api/contacts/invites/:inviteId -> 200 { message }. 404 for both
+    "doesn't exist" and "not yours" — the lookup is owner-scoped."""
+    if not await invite_model.delete_pending(session, invite_id, user.id):
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    return {"message": "Invitation cancelled"}
+
+
 @router.patch("/{link_id}", response_model=ContactOut)
 async def update_contact(
     link_id: int,
