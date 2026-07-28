@@ -6,6 +6,8 @@
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from core.security import create_access_token
 from models import contact_model, invite_model
 from models.invite_model import ContactInvite
@@ -264,3 +266,253 @@ async def test_list_hides_accepted_invites(client, sessions):
     res = await client.get("/api/contacts", headers=_auth(owner))
     rows = res.json()
     assert [r["email"] for r in rows] == ["still@example.com"]
+
+
+# ── POST /api/contacts (the invite branch) ────────────────────────────────────
+
+
+@pytest.fixture
+def invites_sent(monkeypatch):
+    """Record invite emails instead of sending them. Patches the name bound in
+    the ROUTER's namespace, the same way test_summary_images patches the send
+    route's send_summary_email."""
+    sent = []
+
+    async def fake_send(to_email, from_name, signup_url):
+        sent.append((to_email, from_name, signup_url))
+
+    monkeypatch.setattr("routers.contacts.send_contact_invite_email", fake_send)
+    return sent
+
+
+async def test_adding_an_unregistered_email_creates_an_invite_and_emails_them(
+    client, sessions, invites_sent
+):
+    async with sessions() as s:
+        owner = await _user(s, email="inv@example.com", full_name="Eleanor P.")
+        await s.commit()
+
+    res = await client.post(
+        "/api/contacts",
+        json={
+            "contactEmail": "Nobody@Example.com",
+            "nickname": "Kid",
+            "relationship": "son",
+        },
+        headers=_auth(owner),
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["status"] == "invited"
+    assert body["inviteId"] is not None
+    assert body["contactId"] is None
+    # Stored lowercased, whatever case the primary typed.
+    assert body["email"] == "nobody@example.com"
+
+    to_email, from_name, signup_url = invites_sent[0]
+    assert to_email == "nobody@example.com"
+    assert from_name == "Eleanor P."
+    assert "invite=contact" in signup_url
+
+    async with sessions() as s:
+        assert await invite_model.find_any(s, owner.id, "nobody@example.com") is not None
+
+
+async def test_adding_a_registered_contact_still_links_and_sends_no_invite(
+    client, sessions, invites_sent
+):
+    """Regression guard on the pre-existing path."""
+    async with sessions() as s:
+        owner = await _user(s, email="reg@example.com")
+        await _user(s, email="hascontact@example.com", role="contact")
+        await s.commit()
+
+    res = await client.post(
+        "/api/contacts",
+        json={"contactEmail": "hascontact@example.com"},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 201
+    assert res.json()["status"] == "active"
+    assert invites_sent == []
+
+
+async def test_a_primary_role_email_still_404s_and_sends_no_invite(
+    client, sessions, invites_sent
+):
+    async with sessions() as s:
+        owner = await _user(s, email="wr@example.com")
+        await _user(s, email="otherprimary@example.com", role="primary")
+        await s.commit()
+
+    res = await client.post(
+        "/api/contacts",
+        json={"contactEmail": "otherprimary@example.com"},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 404
+    assert res.json()["message"] == "No account with that email"
+    assert invites_sent == []
+
+    async with sessions() as s:
+        assert await invite_model.find_any(s, owner.id, "otherprimary@example.com") is None
+
+
+async def test_inviting_the_same_email_twice_is_a_409(client, sessions, invites_sent):
+    async with sessions() as s:
+        owner = await _user(s, email="dup2@example.com")
+        await s.commit()
+
+    body = {"contactEmail": "twice@example.com"}
+    assert (await client.post("/api/contacts", json=body, headers=_auth(owner))).status_code == 201
+    second = await client.post("/api/contacts", json=body, headers=_auth(owner))
+    assert second.status_code == 409
+    assert second.json()["message"] == "You've already invited this person"
+    assert len(invites_sent) == 1  # no second email
+
+
+async def test_re_inviting_after_acceptance_revives_instead_of_colliding(
+    client, sessions, invites_sent
+):
+    """They accepted, then deleted their account, so the email is unregistered
+    again — but the kept accepted row still owns the UNIQUE."""
+    async with sessions() as s:
+        owner = await _user(s, email="rev2@example.com")
+        await s.commit()
+        invite = await invite_model.create(s, owner.id, "back@example.com", "Old", "old")
+        invite.accepted_at = datetime.now(timezone.utc)
+        await s.commit()
+        invite_id = invite.id
+
+    res = await client.post(
+        "/api/contacts",
+        json={"contactEmail": "back@example.com", "nickname": "New"},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 201
+    assert res.json()["status"] == "invited"
+    assert res.json()["inviteId"] == invite_id  # same row, revived
+    assert res.json()["nickname"] == "New"
+    assert len(invites_sent) == 1
+
+    listed = await client.get("/api/contacts", headers=_auth(owner))
+    assert [r["status"] for r in listed.json()] == ["invited"]
+
+
+async def test_open_invite_cap_returns_429(client, sessions, invites_sent):
+    """As written in the brief, this test created MAX_OPEN_INVITES pending
+    rows all dated "now" — which makes count_open AND count_recent hit their
+    caps simultaneously (both are 10 by coincidence), so a 429 here could come
+    from either check. If the open-invite cap were deleted entirely, the
+    request would still 429 off the daily cap and this test would not notice.
+
+    Backdating past INVITE_WINDOW isolates it: count_open has no time filter
+    (it's "still pending", full stop) so these still saturate it, while
+    count_recent no longer sees them at all. A 429 here can only be the
+    open-invite cap.
+    """
+    from routers.contacts import MAX_OPEN_INVITES
+
+    async with sessions() as s:
+        owner = await _user(s, email="cap@example.com")
+        await s.commit()
+        old = datetime.now(timezone.utc) - timedelta(hours=30)
+        for n in range(MAX_OPEN_INVITES):
+            invite = await invite_model.create(s, owner.id, f"p{n}@example.com", None, None)
+            invite.created_at = old
+        await s.commit()
+
+    res = await client.post(
+        "/api/contacts", json={"contactEmail": "onemore@example.com"}, headers=_auth(owner)
+    )
+    assert res.status_code == 429
+    assert invites_sent == []
+
+
+async def test_daily_cap_returns_429_and_the_window_expires(client, sessions, invites_sent):
+    from routers.contacts import MAX_INVITES_PER_DAY
+
+    async with sessions() as s:
+        owner = await _user(s, email="daycap@example.com")
+        await s.commit()
+        # At the cap for the day, but all accepted so none are "open" — this
+        # isolates the 24h cap from the open-invite cap.
+        for n in range(MAX_INVITES_PER_DAY):
+            invite = await invite_model.create(s, owner.id, f"d{n}@example.com", None, None)
+            invite.accepted_at = datetime.now(timezone.utc)
+        await s.commit()
+
+    res = await client.post(
+        "/api/contacts", json={"contactEmail": "blocked@example.com"}, headers=_auth(owner)
+    )
+    assert res.status_code == 429
+    assert invites_sent == []
+
+    # Backdate them past the window: the same request now succeeds.
+    async with sessions() as s:
+        for n in range(MAX_INVITES_PER_DAY):
+            found = await invite_model.find_any(s, owner.id, f"d{n}@example.com")
+            found.created_at = datetime.now(timezone.utc) - timedelta(hours=30)
+        await s.commit()
+
+    ok = await client.post(
+        "/api/contacts", json={"contactEmail": "blocked@example.com"}, headers=_auth(owner)
+    )
+    assert ok.status_code == 201
+
+
+async def test_a_failed_invite_email_records_nothing(client, sessions, monkeypatch):
+    from core.email import EmailSendError
+
+    async def boom(to_email, from_name, signup_url):
+        raise EmailSendError("resend is down")
+
+    monkeypatch.setattr("routers.contacts.send_contact_invite_email", boom)
+
+    async with sessions() as s:
+        owner = await _user(s, email="fail@example.com")
+        await s.commit()
+
+    res = await client.post(
+        "/api/contacts", json={"contactEmail": "never@example.com"}, headers=_auth(owner)
+    )
+    assert res.status_code == 502
+
+    async with sessions() as s:
+        assert await invite_model.find_any(s, owner.id, "never@example.com") is None
+
+
+async def test_an_invite_id_is_not_a_sendable_contact_id(client, sessions, invites_sent):
+    """The whole reason invites live in their own table: nothing an invite owns
+    can be passed to the send route as a contactId. This guards the invariant
+    against a future refactor that merges the two id spaces."""
+    from models.summary_model import Summary
+
+    async with sessions() as s:
+        owner = await _user(s, email="nosend@example.com")
+        await s.commit()
+        invite = await invite_model.create(s, owner.id, "pending@example.com", None, None)
+        summary = Summary(user_id=owner.id, summary_text="hi", transcript="raw")
+        s.add(summary)
+        await s.commit()
+        invite_id, summary_id = invite.id, summary.id
+
+    res = await client.post(
+        f"/api/summaries/{summary_id}/send",
+        json={"contactIds": [invite_id]},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 403
+    assert res.json()["message"] == "A contactId is not a trusted contact"
+
+
+async def test_a_contact_role_user_cannot_invite(client, sessions, invites_sent):
+    async with sessions() as s:
+        contact = await _user(s, email="notprimary@example.com", role="contact")
+        await s.commit()
+
+    res = await client.post(
+        "/api/contacts", json={"contactEmail": "x@example.com"}, headers=_auth(contact)
+    )
+    assert res.status_code == 403
+    assert invites_sent == []
