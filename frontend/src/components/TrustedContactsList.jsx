@@ -3,16 +3,23 @@
 //
 // One component, five modes, same shape as PastSummaries so the flow stays
 // a single mental thread:
-//   list           -> everyone on the list (GET /api/contacts)
-//   add            -> add by email (POST /api/contacts); the person must
-//                     already have a Contact account — the backend's 404
-//                     becomes "ask them to sign up first"
-//   detail         -> one contact's card, with the edit/remove entry points
-//   edit           -> nickname + relationship only (PATCH /api/contacts/:linkId)
-//   confirm-delete -> Remove is TWO presses, never one (DELETE /api/contacts/:linkId)
+//   list           -> everyone on the list (GET /api/contacts) — active links
+//                     and pending invites in one array, invites shown greyed
+//                     out with a "waiting to join" badge (rowKey/isInvited
+//                     below tell the two apart)
+//   add            -> add by email (POST /api/contacts); an email with no
+//                     account gets invited, so 404 now means only "that
+//                     email belongs to a different kind of account"
+//   detail         -> one contact's card; invites get Resend/Cancel instead
+//                     of the edit/remove entry points
+//   edit           -> nickname + relationship only (PATCH /api/contacts/:linkId
+//                     or /api/contacts/invites/:inviteId for a pending invite)
+//   confirm-delete -> Remove/Cancel is TWO presses, never one (DELETE
+//                     /api/contacts/:linkId or .../invites/:inviteId)
 //
-// Every row is keyed by linkId (the primary↔contact link), not the contact's
-// user id — the contract's PATCH/DELETE take the linkId.
+// Rows come from two independent id sequences (linkId for active links,
+// inviteId for pending invites), so every row is keyed and looked up via
+// rowKey(c), not linkId alone — an invited row's linkId is null.
 //
 // Rendered from App's VIEWS map, so props are { user, onNavigate } — only
 // onNavigate('home') is used, to back the list out to the home screen
@@ -22,12 +29,20 @@
 import { useEffect, useState } from 'react';
 import {
   addContact,
+  cancelInvite,
   deleteContact,
   listContacts,
+  resendInvite,
   updateContact,
+  updateInvite,
 } from '../adapters/contacts-adapters';
 import { displayName } from '../utils';
 import './TrustedContactsList.css';
+
+// Rows come from two id sequences, so neither id alone is a safe React key:
+// an invited row's linkId is null, and a link's id could equal an invite's.
+const rowKey = (c) => (c.status === 'invited' ? `i${c.inviteId}` : `l${c.linkId}`);
+const isInvited = (c) => c.status === 'invited';
 
 export default function TrustedContactsList({ onNavigate }) {
   const [items, setItems] = useState(null); // null = still loading
@@ -99,14 +114,20 @@ export default function TrustedContactsList({ onNavigate }) {
     setIsBusy(false);
     if (error) {
       if (error.status === 404) {
-        // The deliberate "no account with that email" 404 (see the backend's
-        // privacy note) — it also fires when they signed up with the wrong
-        // role, so the message names the account type they need (review).
+        // Now means exactly one thing: an account exists on that email but
+        // it isn't a trusted contact account. (An email with no account at
+        // all gets invited instead of 404ing.)
         setActionError(
-          "We couldn't find a trusted contact account with that email. Ask them to sign up as a trusted contact first — then you can add them here."
+          "That email already belongs to a different kind of account. A trusted contact needs their own trusted contact account."
         );
       } else if (error.status === 409) {
+        // Covers both "already linked" and "already invited" — we don't parse
+        // the message. Reloading shows which one it was, and a pending
+        // invitation's own card is where Send-again lives.
         setActionError('This person is already on your list.');
+        load();
+      } else if (error.status === 429) {
+        setActionError(error.message);
       } else {
         setActionError("We couldn't add this contact. Please try again.");
       }
@@ -122,10 +143,13 @@ export default function TrustedContactsList({ onNavigate }) {
     setActionError(null);
     // Both fields always sent: the form shows both, so a cleared box means
     // "remove it" (null), not "leave it alone".
-    const { data, error } = await updateContact(selected.linkId, {
+    const fields = {
       nickname: nickname.trim() || null,
       relationship: relationship.trim() || null,
-    });
+    };
+    const { data, error } = isInvited(selected)
+      ? await updateInvite(selected.inviteId, fields)
+      : await updateContact(selected.linkId, fields);
     setIsBusy(false);
     if (error) {
       setActionError("We couldn't save your changes. Please try again.");
@@ -133,23 +157,46 @@ export default function TrustedContactsList({ onNavigate }) {
     }
     setSelected(data);
     // Keep the list in sync without refetching.
-    setItems((list) => list.map((c) => (c.linkId === data.linkId ? data : c)));
+    setItems((list) => list.map((c) => (rowKey(c) === rowKey(data) ? data : c)));
     setMode('detail');
   };
 
   const handleDelete = async () => {
     setIsBusy(true);
     setActionError(null);
-    const { error } = await deleteContact(selected.linkId);
+    const { error } = isInvited(selected)
+      ? await cancelInvite(selected.inviteId)
+      : await deleteContact(selected.linkId);
     setIsBusy(false);
     if (error) {
-      setActionError("We couldn't remove this contact. Please try again.");
+      setActionError(
+        isInvited(selected)
+          ? "We couldn't cancel this invitation. Please try again."
+          : "We couldn't remove this contact. Please try again."
+      );
       setMode('detail');
       return;
     }
-    setItems((list) => list.filter((c) => c.linkId !== selected.linkId));
+    const goneKey = rowKey(selected);
+    setItems((list) => list.filter((c) => rowKey(c) !== goneKey));
     setSelected(null);
     setMode('list');
+  };
+
+  const handleResend = async () => {
+    setIsBusy(true);
+    setActionError(null);
+    const { error } = await resendInvite(selected.inviteId);
+    setIsBusy(false);
+    if (error) {
+      setActionError(
+        error.status === 429
+          ? 'We sent that invitation recently. Please try again later.'
+          : "We couldn't send that invitation again. Please try again."
+      );
+      return;
+    }
+    setActionError('Invitation sent again.');
   };
 
   // ── list mode (also loading / error / empty) ──────────────────────────────
@@ -188,11 +235,15 @@ export default function TrustedContactsList({ onNavigate }) {
         {items !== null && items.length > 0 && (
           <ul className="trusted-contacts__list">
             {items.map((c) => (
-              <li key={c.linkId}>
+              <li key={rowKey(c)}>
                 {/* The whole card is the tap target — no tiny icons. */}
                 <button
                   type="button"
-                  className="trusted-contacts__item"
+                  className={
+                    isInvited(c)
+                      ? 'trusted-contacts__item trusted-contacts__item--invited'
+                      : 'trusted-contacts__item'
+                  }
                   onClick={() => openDetail(c)}
                   disabled={isBusy}
                 >
@@ -203,6 +254,13 @@ export default function TrustedContactsList({ onNavigate }) {
                     </span>
                   )}
                   <span className="trusted-contacts__item-email">{c.email}</span>
+                  {/* Words, not just the grey: colour alone would be invisible
+                      to a screen reader and easy to miss on a phone. */}
+                  {isInvited(c) && (
+                    <span className="trusted-contacts__item-badge">
+                      Invited &middot; waiting for them to join
+                    </span>
+                  )}
                 </button>
               </li>
             ))}
@@ -240,8 +298,9 @@ export default function TrustedContactsList({ onNavigate }) {
         </button>
         <h1 className="trusted-contacts__heading">Add a contact</h1>
         <p className="trusted-contacts__hint">
-          They need their own trusted contact account first. Once they have
-          signed up, enter the email they used.
+          Enter their email. If they already have a trusted contact account,
+          they go straight onto your list. If not, we&rsquo;ll email them an
+          invitation and hold their place here until they join.
         </p>
 
         <form className="trusted-contacts__form" onSubmit={handleAdd}>
@@ -312,7 +371,7 @@ export default function TrustedContactsList({ onNavigate }) {
         >
           &larr; Cancel
         </button>
-        <h1 className="trusted-contacts__heading">{selected.fullName}</h1>
+        <h1 className="trusted-contacts__heading">{displayName(selected)}</h1>
         <p className="trusted-contacts__hint">{selected.email}</p>
 
         <form className="trusted-contacts__form" onSubmit={handleSaveEdit}>
@@ -369,8 +428,18 @@ export default function TrustedContactsList({ onNavigate }) {
       <h1 className="trusted-contacts__heading">{displayName(selected)}</h1>
 
       <dl className="trusted-contacts__facts">
-        <dt>Name</dt>
-        <dd>{selected.fullName}</dd>
+        {/* An invited person has no registered name yet — show what we do know. */}
+        {isInvited(selected) ? (
+          <>
+            <dt>Status</dt>
+            <dd>Invited &middot; waiting for them to join</dd>
+          </>
+        ) : (
+          <>
+            <dt>Name</dt>
+            <dd>{selected.fullName}</dd>
+          </>
+        )}
         <dt>Email</dt>
         <dd>{selected.email}</dd>
         {selected.nickname && (
@@ -394,8 +463,9 @@ export default function TrustedContactsList({ onNavigate }) {
       {mode === 'confirm-delete' ? (
         <>
           <p className="trusted-contacts__confirm">
-            Remove {displayName(selected)} from your list? They will no longer
-            receive your summaries.
+            {isInvited(selected)
+              ? `Cancel the invitation to ${selected.email}? They will not be able to join from the email we sent.`
+              : `Remove ${displayName(selected)} from your list? They will no longer receive your summaries.`}
           </p>
           <button
             type="button"
@@ -403,7 +473,7 @@ export default function TrustedContactsList({ onNavigate }) {
             onClick={handleDelete}
             disabled={isBusy}
           >
-            Yes, remove them
+            {isInvited(selected) ? 'Yes, cancel it' : 'Yes, remove them'}
           </button>
           <button
             type="button"
@@ -411,7 +481,7 @@ export default function TrustedContactsList({ onNavigate }) {
             onClick={() => setMode('detail')}
             disabled={isBusy}
           >
-            No, keep them
+            {isInvited(selected) ? 'No, keep waiting' : 'No, keep them'}
           </button>
         </>
       ) : (
@@ -424,13 +494,23 @@ export default function TrustedContactsList({ onNavigate }) {
           >
             Change nickname or relationship
           </button>
+          {isInvited(selected) && (
+            <button
+              type="button"
+              className="trusted-contacts__secondary"
+              onClick={handleResend}
+              disabled={isBusy}
+            >
+              Send the invitation again
+            </button>
+          )}
           <button
             type="button"
             className="trusted-contacts__secondary"
             onClick={() => setMode('confirm-delete')}
             disabled={isBusy}
           >
-            Remove this contact
+            {isInvited(selected) ? 'Cancel this invitation' : 'Remove this contact'}
           </button>
         </>
       )}
