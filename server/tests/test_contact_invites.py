@@ -89,19 +89,38 @@ async def test_count_open_and_count_recent(session):
     owner = await _user(session, email="p4@example.com")
     await session.commit()
 
-    await invite_model.create(session, owner.id, "one@example.com", None, None)
-    old = await invite_model.create(session, owner.id, "two@example.com", None, None)
-
-    # Backdate one invite past the 24h window, and accept it so it stops
-    # counting as open — count_recent must still ignore the window, not the
-    # acceptance.
-    old.created_at = datetime.now(timezone.utc) - timedelta(hours=30)
-    old.accepted_at = datetime.now(timezone.utc)
+    # Three rows, each proving a different edge of the two helpers so that
+    # neither can be satisfied by copying the other's filter:
+    #   - pending + recent      -> counted by BOTH (the ordinary case)
+    #   - accepted + recent     -> counted by count_recent ONLY. This is the
+    #     row that matters: count_recent counts outbound email volume, not
+    #     open invites, so an already-accepted invite still counts against
+    #     the daily send cap. If count_recent secretly filtered on
+    #     accepted_at IS NULL (i.e. behaved like count_open), this row would
+    #     wrongly disappear from its count.
+    #   - pending + backdated past 24h -> counted by count_open ONLY. This
+    #     proves count_recent actually applies the time window rather than
+    #     just deferring to "still pending".
+    pending_recent = await invite_model.create(
+        session, owner.id, "one@example.com", None, None
+    )
+    accepted_recent = await invite_model.create(
+        session, owner.id, "two@example.com", None, None
+    )
+    accepted_recent.accepted_at = datetime.now(timezone.utc)
+    pending_old = await invite_model.create(
+        session, owner.id, "three@example.com", None, None
+    )
+    pending_old.created_at = datetime.now(timezone.utc) - timedelta(hours=30)
     await session.commit()
 
-    assert await invite_model.count_open(session, owner.id) == 1
+    # open: pending_recent + pending_old (accepted_recent is excluded — it's
+    # accepted, not open).
+    assert await invite_model.count_open(session, owner.id) == 2
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    assert await invite_model.count_recent(session, owner.id, cutoff) == 1
+    # recent: pending_recent + accepted_recent (pending_old is excluded — it's
+    # outside the window, despite still being pending).
+    assert await invite_model.count_recent(session, owner.id, cutoff) == 2
 
 
 async def test_delete_pending_is_owner_scoped(session):
