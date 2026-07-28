@@ -198,8 +198,15 @@ async def test_list_returns_active_contacts_before_pending_invites(client, sessi
             s, email="real@example.com", full_name="Real Person", role="contact"
         )
         await s.commit()
-        await contact_model.create(s, owner.id, contact.id, "Bestie", "friend")
+        # The invite is created BEFORE the link, deliberately — if the router
+        # ever regressed to merging the two row types by created_at/id instead
+        # of partitioning by status, chronological order would put the invite
+        # first and this test would catch it. Do not "tidy" this back to
+        # creating the link first; that would make the assertion below pass
+        # for the wrong reason (creation order) instead of the right one
+        # (status partitioning).
         await invite_model.create(s, owner.id, "waiting@example.com", "Kid", "son")
+        await contact_model.create(s, owner.id, contact.id, "Bestie", "friend")
         await s.commit()
 
     res = await client.get("/api/contacts", headers=_auth(owner))
@@ -226,24 +233,34 @@ async def test_list_returns_active_contacts_before_pending_invites(client, sessi
 
 
 async def test_list_hides_another_owners_invites(client, sessions):
+    # b gets their OWN pending invite so the assertion has to prove scoping —
+    # not just absence. A broken join/filter that returned [] unconditionally
+    # would satisfy `== []` but would also wrongly drop b's own invite.
     async with sessions() as s:
         a = await _user(s, email="la@example.com")
         b = await _user(s, email="lb@example.com")
         await s.commit()
         await invite_model.create(s, a.id, "secret@example.com", None, None)
+        await invite_model.create(s, b.id, "mine@example.com", None, None)
         await s.commit()
 
     res = await client.get("/api/contacts", headers=_auth(b))
-    assert res.json() == []
+    rows = res.json()
+    assert [r["email"] for r in rows] == ["mine@example.com"]
 
 
 async def test_list_hides_accepted_invites(client, sessions):
+    # The owner also has one still-PENDING invite, so the assertion proves the
+    # accepted one is filtered out specifically — not that the query always
+    # returns nothing.
     async with sessions() as s:
         owner = await _user(s, email="acc2@example.com")
         await s.commit()
-        invite = await invite_model.create(s, owner.id, "gone@example.com", None, None)
-        invite.accepted_at = datetime.now(timezone.utc)
+        accepted = await invite_model.create(s, owner.id, "gone@example.com", None, None)
+        accepted.accepted_at = datetime.now(timezone.utc)
+        await invite_model.create(s, owner.id, "still@example.com", None, None)
         await s.commit()
 
     res = await client.get("/api/contacts", headers=_auth(owner))
-    assert res.json() == []
+    rows = res.json()
+    assert [r["email"] for r in rows] == ["still@example.com"]
