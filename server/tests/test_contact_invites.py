@@ -125,16 +125,111 @@ async def test_count_open_and_count_recent(session):
     assert await invite_model.count_recent(session, owner.id, cutoff) == 2
 
 
-async def test_delete_pending_is_owner_scoped(session):
+async def test_cancel_pending_is_owner_scoped(session):
     a = await _user(session, email="da@example.com")
     b = await _user(session, email="db@example.com")
     await session.commit()
 
     invite = await invite_model.create(session, a.id, "z@example.com", None, None)
 
-    assert await invite_model.delete_pending(session, invite.id, b.id) is False
-    assert await invite_model.delete_pending(session, invite.id, a.id) is True
-    assert await invite_model.find_any(session, a.id, "z@example.com") is None
+    assert await invite_model.cancel_pending(session, invite.id, b.id) is False
+    # b's rejected call must not have stamped anything.
+    assert invite.cancelled_at is None
+
+    assert await invite_model.cancel_pending(session, invite.id, a.id) is True
+    # Cancelling twice is not "cancelled again" — it's a 404 at the router.
+    assert await invite_model.cancel_pending(session, invite.id, a.id) is False
+
+
+async def test_cancel_pending_stamps_instead_of_deleting_the_row(session):
+    """The soft delete itself. If this ever regresses to session.delete(), the
+    24h invite cap becomes bypassable by cancelling — see the module header."""
+    owner = await _user(session, email="soft@example.com")
+    await session.commit()
+
+    invite = await invite_model.create(session, owner.id, "soft1@example.com", None, None)
+    invite_id = invite.id
+
+    assert await invite_model.cancel_pending(session, invite_id, owner.id) is True
+
+    # The row is STILL THERE, stamped — not gone.
+    survivor = await invite_model.find_any(session, owner.id, "soft1@example.com")
+    assert survivor is not None
+    assert survivor.id == invite_id
+    assert survivor.cancelled_at is not None
+    # And it is not masquerading as accepted, which would send it down the
+    # acceptance paths instead.
+    assert survivor.accepted_at is None
+
+
+async def test_a_cancelled_invite_is_not_live_but_still_counts_for_the_day(session):
+    """The one asymmetry the soft delete exists to create: cancelled rows leave
+    every "live" query but stay inside count_recent's window.
+
+    A second, still-pending invite is present throughout so each assertion has
+    to prove the CANCELLED row specifically was included/excluded — a helper
+    that returned nothing at all would fail these too.
+    """
+    owner = await _user(session, email="halflife@example.com")
+    await session.commit()
+
+    cancelled = await invite_model.create(session, owner.id, "gone@example.com", None, None)
+    await invite_model.create(session, owner.id, "kept@example.com", None, None)
+    await invite_model.cancel_pending(session, cancelled.id, owner.id)
+
+    # Not live: absent from the list, not open, not findable as pending.
+    pending = await invite_model.list_pending_by_owner(session, owner.id)
+    assert [i.email for i in pending] == ["kept@example.com"]
+    assert await invite_model.count_open(session, owner.id) == 1
+    assert await invite_model.find_pending(session, cancelled.id, owner.id) is None
+
+    # Still counted for the day — both rows.
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    assert await invite_model.count_recent(session, owner.id, cutoff) == 2
+
+
+async def test_a_cancelled_invite_is_not_accepted_on_registration(session):
+    """Cancelling promises "they will not be able to join from the email we
+    sent". A cancelled row must therefore never convert into a link.
+
+    The same owner keeps a pending invite to a DIFFERENT address so this can't
+    pass just because the acceptance lookup found nothing at all.
+    """
+    owner = await _user(session, email="withdrawn@example.com")
+    await session.commit()
+
+    cancelled = await invite_model.create(session, owner.id, "nope@example.com", None, None)
+    await invite_model.create(session, owner.id, "yes@example.com", None, None)
+    await invite_model.cancel_pending(session, cancelled.id, owner.id)
+
+    for_cancelled = await invite_model.list_pending_for_email(session, "nope@example.com")
+    assert for_cancelled == []
+    for_pending = await invite_model.list_pending_for_email(session, "yes@example.com")
+    assert [i.email for i in for_pending] == ["yes@example.com"]
+
+    joiner = await _user(session, email="nope@example.com", role="contact")
+    await session.commit()
+
+    assert await invite_model.accept_for_user(session, joiner) == 0
+    assert await contact_model.is_contact_of(session, owner.id, joiner.id) is False
+
+
+async def test_revive_clears_a_cancellation_too(session):
+    """revive has to clear BOTH stamps: a row that came back with cancelled_at
+    still set would be invisible to every live query it must reappear in."""
+    owner = await _user(session, email="mindchange@example.com")
+    await session.commit()
+
+    invite = await invite_model.create(session, owner.id, "again2@example.com", "Old", "old")
+    await invite_model.cancel_pending(session, invite.id, owner.id)
+
+    revived = await invite_model.revive(session, invite, "New", "new")
+    assert revived.cancelled_at is None
+    assert revived.accepted_at is None
+    assert revived.nickname == "New"
+    # Actually live again, not merely un-stamped in Python.
+    pending = await invite_model.list_pending_by_owner(session, owner.id)
+    assert [i.id for i in pending] == [invite.id]
 
 
 async def test_accept_for_user_creates_links_for_every_inviter(session):

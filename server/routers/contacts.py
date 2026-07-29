@@ -111,10 +111,18 @@ async def _invite_unregistered(
     """
     email = body.contact_email.lower()  # the model stores lowercased only
 
-    # find_any, not find_pending: an ACCEPTED row still owns the UNIQUE
-    # (owner_id, email), so we have to see it here to revive it below.
+    # find_any, not find_pending: an accepted OR cancelled row still owns the
+    # UNIQUE (owner_id, email), so we have to see it here to revive it below.
     existing = await invite_model.find_any(session, owner.id, email)
-    if existing is not None and existing.accepted_at is None:
+    # "Pending" is both stamps unset. A cancelled row is NOT a duplicate to
+    # refuse — the primary is entitled to change their mind — so it falls
+    # through to the revive path, which is also the only thing that can satisfy
+    # the UNIQUE without an IntegrityError.
+    if (
+        existing is not None
+        and existing.accepted_at is None
+        and existing.cancelled_at is None
+    ):
         raise HTTPException(
             status_code=409, detail="You've already invited this person"
         )
@@ -137,7 +145,8 @@ async def _invite_unregistered(
     await _send_invite(owner, email)  # email BEFORE recording
 
     if existing is not None:
-        # Accepted row: re-open it rather than inserting a colliding second one.
+        # Accepted or cancelled row: re-open it rather than inserting a
+        # colliding second one.
         invite = await invite_model.revive(
             session, existing, body.nickname, body.relationship
         )
@@ -263,8 +272,13 @@ async def cancel_invite(
     session: AsyncSession = Depends(get_db),
 ):
     """DELETE /api/contacts/invites/:inviteId -> 200 { message }. 404 for both
-    "doesn't exist" and "not yours" — the lookup is owner-scoped."""
-    if not await invite_model.delete_pending(session, invite_id, user.id):
+    "doesn't exist" and "not yours" — the lookup is owner-scoped.
+
+    A SOFT delete: the row survives with cancelled_at stamped so it keeps
+    counting against MAX_INVITES_PER_DAY. Cancelling is unlimited and
+    user-initiated, so a hard delete refunded the daily allowance on demand.
+    """
+    if not await invite_model.cancel_pending(session, invite_id, user.id):
         raise HTTPException(status_code=404, detail="Invitation not found")
     return {"message": "Invitation cancelled"}
 
