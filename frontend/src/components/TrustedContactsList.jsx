@@ -36,7 +36,7 @@ import {
   updateContact,
   updateInvite,
 } from '../adapters/contacts-adapters';
-import { displayName } from '../utils';
+import { displayName, formatDate } from '../utils';
 import './TrustedContactsList.css';
 
 // Rows come from two id sequences, so neither id alone is a safe React key:
@@ -101,11 +101,27 @@ export default function TrustedContactsList({ onNavigate }) {
     setMode('list');
   };
 
+  // A 404 from any of the three invite endpoints means that invitation stopped
+  // being pending while this card was open — the invitee registered, which
+  // converts it into a real contact (or it was cancelled from another device).
+  // The list is loaded once on mount and this screen never refetched, so
+  // without this the stale row's Save / Resend / Cancel all failed with
+  // "Please try again" — advice that is guaranteed to fail forever. Refetch,
+  // drop back to the list, and say what changed.
+  const handleStaleInvite = () => {
+    load();
+    setSelected(null);
+    setMode('list');
+    setActionError(
+      "That invitation isn't waiting any more — it looks like they've joined. They should be on your list now."
+    );
+  };
+
   const handleAdd = async (e) => {
     e.preventDefault();
     setIsBusy(true);
     setActionError(null);
-    const { data, error } = await addContact({
+    const { error } = await addContact({
       contactEmail: addEmail.trim(),
       // Blank optional fields stay unset rather than becoming ''.
       nickname: nickname.trim() || undefined,
@@ -133,7 +149,11 @@ export default function TrustedContactsList({ onNavigate }) {
       }
       return;
     }
-    setItems((list) => [...list, data]);
+    // Refetch rather than appending the new row: the server returns active
+    // contacts before pending invites, and appending put a freshly added
+    // REGISTERED contact underneath the greyed-out invitations — exactly the
+    // ordering that server-side partitioning exists to prevent.
+    load();
     setMode('list');
   };
 
@@ -152,6 +172,10 @@ export default function TrustedContactsList({ onNavigate }) {
       : await updateContact(selected.linkId, fields);
     setIsBusy(false);
     if (error) {
+      if (isInvited(selected) && error.status === 404) {
+        handleStaleInvite();
+        return;
+      }
       setActionError("We couldn't save your changes. Please try again.");
       return;
     }
@@ -169,6 +193,10 @@ export default function TrustedContactsList({ onNavigate }) {
       : await deleteContact(selected.linkId);
     setIsBusy(false);
     if (error) {
+      if (isInvited(selected) && error.status === 404) {
+        handleStaleInvite();
+        return;
+      }
       setActionError(
         isInvited(selected)
           ? "We couldn't cancel this invitation. Please try again."
@@ -189,6 +217,10 @@ export default function TrustedContactsList({ onNavigate }) {
     const { error } = await resendInvite(selected.inviteId);
     setIsBusy(false);
     if (error) {
+      if (error.status === 404) {
+        handleStaleInvite();
+        return;
+      }
       setActionError(
         error.status === 429
           ? 'We sent that invitation recently. Please try again later.'
@@ -433,6 +465,11 @@ export default function TrustedContactsList({ onNavigate }) {
           <>
             <dt>Status</dt>
             <dd>Invited &middot; waiting for them to join</dd>
+            {/* The only sensible input to "Send the invitation again" below is
+                how long ago the last one went out — without this a three-week
+                -old invitation looks identical to a three-hour-old one. */}
+            <dt>Invited</dt>
+            <dd>{formatDate(selected.invitedAt)}</dd>
           </>
         ) : (
           <>
