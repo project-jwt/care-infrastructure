@@ -25,3 +25,33 @@ export const isInvited = (c) => c.status === 'invited';
 // sequences, so a link and an invite can share a number. Prefixing keeps them
 // in separate namespaces.
 export const rowKey = (c) => (isInvited(c) ? `i${c.inviteId}` : `l${c.linkId}`);
+
+// The invitation links we email land on the app ROOT with query params — there
+// is no router here, so any other path falls through to the server's static
+// catch-all. Two kinds:
+//   ?invite=contact&email=…             a primary invited a trusted contact
+//   ?invite=primary&email=…&contact=…   a contact invited a primary user
+//
+// Returns null when the URL carries no invitation we recognize, so callers bail
+// with one check. An unknown `invite` value is treated as no invitation rather
+// than defaulting to a role — a hand-edited link must not get to choose.
+//
+// Lives here rather than inline in App.jsx so it can be unit-tested: this
+// project has no jsdom, so nothing inside a component is reachable from tests.
+const INVITE_ROLES = { contact: 'contact', primary: 'primary' };
+
+export const parseInviteParams = (search) => {
+  const params = new URLSearchParams(search);
+  const role = INVITE_ROLES[params.get('invite')];
+  if (!role) return null;
+  return {
+    role,
+    // URLSearchParams.get() already percent-decodes. Decoding again would
+    // corrupt an address containing a literal '+' (the backend sends it as
+    // %2B, and a second pass turns '+' into a space).
+    email: params.get('email') || '',
+    // Only a primary invitation carries this: the contact's own address, which
+    // the new primary should add once they are set up.
+    contactEmail: params.get('contact') || null,
+  };
+};
