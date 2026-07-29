@@ -39,17 +39,22 @@ import {
 import { displayName, formatDate, isInvited, rowKey } from '../utils';
 import './TrustedContactsList.css';
 
-export default function TrustedContactsList({ onNavigate }) {
+export default function TrustedContactsList({ onNavigate, initialAddEmail }) {
   const [items, setItems] = useState(null); // null = still loading
   const [loadError, setLoadError] = useState(null);
 
-  const [mode, setMode] = useState('list'); // list | add | detail | edit | confirm-delete
+  // Arriving from an invitation link opens the add form directly, with the
+  // inviting contact's address already in it — one press from connected.
+  // useState reads its argument only on first mount, which is what we want:
+  // App switches `view` to 'contacts' in the same commit that supplies the
+  // prop, then clears it, and this component must not reopen the form later.
+  const [mode, setMode] = useState(initialAddEmail ? 'add' : 'list'); // list | add | detail | edit | confirm-delete
   const [selected, setSelected] = useState(null); // the open contact (full link record)
   const [isBusy, setIsBusy] = useState(false); // a request is in flight
   const [actionError, setActionError] = useState(null);
 
   // Add form fields (email only exists here; edit can't change it).
-  const [addEmail, setAddEmail] = useState('');
+  const [addEmail, setAddEmail] = useState(initialAddEmail || '');
   // Nickname + relationship are shared by the add and edit forms — they're
   // seeded from '' (add) or the selected contact (edit) on entry.
   const [nickname, setNickname] = useState('');
