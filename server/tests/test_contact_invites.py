@@ -677,6 +677,126 @@ async def test_cancel_invite_removes_it_from_the_list(client, sessions):
 
     listed = await client.get("/api/contacts", headers=_auth(owner))
     assert listed.json() == []
+    # It's off the list and no longer "open" — but the ROW is still there,
+    # stamped. Asserting only the empty list would pass against the hard delete
+    # this replaced, which is what made the daily cap bypassable.
+    async with sessions() as s:
+        survivor = await invite_model.find_any(s, owner.id, "bye@example.com")
+        assert survivor is not None
+        assert survivor.id == invite_id
+        assert survivor.cancelled_at is not None
+        assert await invite_model.count_open(s, owner.id) == 0
+
+
+async def test_cancelling_does_not_refund_the_daily_invite_cap(
+    client, sessions, invites_sent
+):
+    """The abuse loop, closed. add -> cancel -> repeat used to send unlimited
+    invitation email: cancel hard-deleted the row and count_recent only counts
+    rows that still exist, so every cancellation refunded an allowance.
+
+    Cancelling each one also keeps count_open at zero throughout, so the 429
+    at the end can ONLY be the 24h cap — not the open-invite cap. Against the
+    old hard delete, the final request below returns 201.
+    """
+    from routers.contacts import MAX_INVITES_PER_DAY
+
+    async with sessions() as s:
+        owner = await _user(s, email="loop@example.com")
+        await s.commit()
+
+    for n in range(MAX_INVITES_PER_DAY):
+        created = await client.post(
+            "/api/contacts",
+            json={"contactEmail": f"loop{n}@example.com"},
+            headers=_auth(owner),
+        )
+        assert created.status_code == 201, created.json()
+        cancelled = await client.delete(
+            f"/api/contacts/invites/{created.json()['inviteId']}", headers=_auth(owner)
+        )
+        assert cancelled.status_code == 200
+
+    # Nothing is waiting, so the open-invite cap is nowhere near its limit.
+    async with sessions() as s:
+        assert await invite_model.count_open(s, owner.id) == 0
+
+    blocked = await client.post(
+        "/api/contacts", json={"contactEmail": "one-too-many@example.com"}, headers=_auth(owner)
+    )
+    assert blocked.status_code == 429
+    # And crucially, no email was sent for the blocked one.
+    assert len(invites_sent) == MAX_INVITES_PER_DAY
+
+
+async def test_re_inviting_a_cancelled_address_revives_the_same_row(
+    client, sessions, invites_sent
+):
+    """A cancelled row still owns UNIQUE (owner_id, email), so a primary who
+    changes their mind must revive it — not collide with an IntegrityError."""
+    async with sessions() as s:
+        owner = await _user(s, email="again3@example.com")
+        await s.commit()
+
+    first = await client.post(
+        "/api/contacts",
+        json={"contactEmail": "mindchanged@example.com", "nickname": "Old"},
+        headers=_auth(owner),
+    )
+    assert first.status_code == 201
+    invite_id = first.json()["inviteId"]
+
+    assert (
+        await client.delete(f"/api/contacts/invites/{invite_id}", headers=_auth(owner))
+    ).status_code == 200
+
+    again = await client.post(
+        "/api/contacts",
+        json={"contactEmail": "mindchanged@example.com", "nickname": "New"},
+        headers=_auth(owner),
+    )
+    assert again.status_code == 201, again.json()  # not 409, and not a 500 from the UNIQUE
+    assert again.json()["inviteId"] == invite_id   # the same row, revived
+    assert again.json()["nickname"] == "New"
+
+    # Actually pending again: back on the list, and open once more.
+    listed = await client.get("/api/contacts", headers=_auth(owner))
+    assert [(r["status"], r["email"]) for r in listed.json()] == [
+        ("invited", "mindchanged@example.com")
+    ]
+    async with sessions() as s:
+        assert await invite_model.count_open(s, owner.id) == 1
+    assert len(invites_sent) == 2  # both sends really happened
+
+
+async def test_invite_endpoints_404_on_a_cancelled_invite(client, sessions, invites_sent):
+    async with sessions() as s:
+        owner = await _user(s, email="dead@example.com")
+        await s.commit()
+        invite = await invite_model.create(s, owner.id, "dead1@example.com", None, None)
+        await invite_model.cancel_pending(s, invite.id, owner.id)
+        invite_id = invite.id
+
+    for call in (
+        client.patch(
+            f"/api/contacts/invites/{invite_id}", json={"nickname": "x"}, headers=_auth(owner)
+        ),
+        client.post(f"/api/contacts/invites/{invite_id}/resend", headers=_auth(owner)),
+        client.delete(f"/api/contacts/invites/{invite_id}", headers=_auth(owner)),
+    ):
+        res = await call
+        assert res.status_code == 404
+        assert res.json()["message"] == "Invitation not found"
+    assert invites_sent == []  # the resend really didn't send
+
+    # Same reasoning as the once-accepted case: the 404 must come from "not
+    # pending", not from the row having been removed — otherwise this would
+    # pass against a cancel that deletes the row after all.
+    async with sessions() as s:
+        survivor = await invite_model.find_any(s, owner.id, "dead1@example.com")
+        assert survivor is not None
+        assert survivor.id == invite_id
+        assert survivor.cancelled_at is not None
 
 
 async def test_invite_endpoints_are_owner_scoped(client, sessions, invites_sent):
