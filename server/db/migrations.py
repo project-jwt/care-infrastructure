@@ -25,6 +25,7 @@ def _migrate(conn: Connection) -> None:
         return  # SQLite (local/CI tests): create_all already made the right schema
     _summary_recipients_contact_id_set_null(conn)
     _contact_invites_add_cancelled_at(conn)
+    _contact_invites_index_email(conn)
 
 
 def _summary_recipients_contact_id_set_null(conn: Connection) -> None:
@@ -85,3 +86,25 @@ def _contact_invites_add_cancelled_at(conn: Connection) -> None:
         return
 
     conn.execute(text("ALTER TABLE contact_invites ADD COLUMN cancelled_at TIMESTAMPTZ"))
+
+
+def _contact_invites_index_email(conn: Connection) -> None:
+    """contact_invites.email: add the standalone index create_all would have
+    made on a fresh DB, for databases where the table already exists.
+
+    The table's UNIQUE (owner_id, email) leads with owner_id, so it can't serve
+    a lookup by email alone — which is what accept_for_user does on EVERY
+    registration (list_pending_for_email). Without this, that lookup is a
+    sequential scan of the whole table.
+
+    No state guard needed: CREATE INDEX IF NOT EXISTS is idempotent in
+    Postgres, unlike the ALTERs above. The name must match the one SQLAlchemy
+    derives from index=True (ix_<table>_<column>), or a fresh DB and a migrated
+    one would end up with two indexes covering the same column.
+    """
+    conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_contact_invites_email "
+            "ON contact_invites (email)"
+        )
+    )

@@ -139,7 +139,15 @@ async def _invite_unregistered(
     if await invite_model.count_recent(session, owner.id, cutoff) >= MAX_INVITES_PER_DAY:
         raise HTTPException(
             status_code=429,
-            detail="You've sent a lot of invitations today. Please try again tomorrow.",
+            # Says "sent", not "waiting": cancelled and accepted invitations
+            # still count toward this window (that's what stops cancel-and-
+            # re-invite from refunding the cap), so a user can hit this while
+            # looking at an empty list. Without saying so, the message reads
+            # as a bug.
+            detail=(
+                "You've sent a lot of invitations today. Ones you cancelled "
+                "still count, so please try again tomorrow."
+            ),
         )
 
     await _send_invite(owner, email)  # email BEFORE recording

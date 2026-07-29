@@ -46,7 +46,11 @@ class ContactInvite(Base):
     # ALWAYS stored lowercased — the router normalizes before calling in here.
     # A plain UNIQUE on the stored value behaves identically on Postgres and on
     # the SQLite test DB; a lower(email) functional index would not.
-    email: Mapped[str] = mapped_column(Text)
+    # index=True: the UNIQUE below covers (owner_id, email) with owner_id
+    # LEADING, which doesn't serve a lookup by email alone. accept_for_user
+    # does exactly that on EVERY registration (list_pending_for_email), so it
+    # gets its own index rather than a scan.
+    email: Mapped[str] = mapped_column(Text, index=True)
 
     # The labels the owner typed. They ride across onto the link at acceptance,
     # so the primary doesn't have to re-enter them.
