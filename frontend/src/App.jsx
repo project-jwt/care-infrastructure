@@ -84,15 +84,28 @@ export default function App() {
   // An invitation link is ?invite=contact&email=… on the app root — query
   // params, not a path, because there's no router here and any other path
   // falls through to the server's static catch-all.
+  //
+  // Runs after the stored-token check rather than on mount, because whether to
+  // act depends on `user`, which isn't known until then.
   useEffect(() => {
+    if (checking) return; // `user` is still unknown
     const params = new URLSearchParams(window.location.search);
     if (params.get('invite') !== 'contact') return;
+    // Only consume the link when NOBODY is logged in. An already-authenticated
+    // visitor (shared device, or an invitee who is also a primary here) never
+    // reaches the logged-out branch below that renders the prefilled register
+    // form — so stripping the params for them would drop them on their own
+    // dashboard with no explanation AND destroy the link, leaving nothing to
+    // retry. Leaving the URL untouched means they can log out and click it
+    // again. Logging them out for them, or offering to, is a product decision
+    // nobody has made.
+    if (user) return;
     setInvitePrefill({ email: params.get('email') || '', role: 'contact' });
     setAuthMode('register');
     setAuthView('auth');
     // Drop the params so a refresh (or a later login) doesn't re-open this.
     window.history.replaceState({}, '', window.location.pathname);
-  }, []);
+  }, [checking, user]);
 
   const handleAuth = (loggedInUser) => {
     setUser(loggedInUser);
