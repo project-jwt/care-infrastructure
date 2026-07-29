@@ -1,7 +1,12 @@
-# core/email.py — Resend client + send_summary_email for POST /api/summaries/:id/send
+# core/email.py — Resend client + the app's outbound email
 #
-# Same shape as core/ai.py: configure the SDK once at import, expose one
-# function, raise on failure and let the router translate that into a 502.
+# Three things live here:
+#   send_summary_email        -> POST /api/summaries/:id/send
+#   invite_signup_url         -> builds the link an invitation email carries
+#   send_contact_invite_email -> POST /api/contacts, unregistered-email branch
+#
+# Same shape as core/ai.py: configure the SDK once at import, raise on failure
+# and let the router translate that into a 502.
 # The sender address comes from settings.email_sender: in production it's an
 # address at our Resend-verified domain (projectjwt.marcylab.us); locally it
 # falls back to Resend's sandbox sender.

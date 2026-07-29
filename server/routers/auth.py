@@ -57,6 +57,15 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_db)):
             # stop someone from creating an account. The account is already
             # committed; the inviter simply keeps seeing a pending invite,
             # which they can cancel and re-send.
+            #
+            # What makes swallowing actually safe is db/engine.py's
+            # expire_on_commit=False. If accept_for_user died mid-commit, this
+            # session needs a rollback before it can be used again — and with
+            # the default expire_on_commit=True, `user`'s attributes would be
+            # marked stale, so serializing AuthOut(user=user) below would
+            # trigger a re-SELECT on that session and 500: the guard would fail
+            # the very registration it exists to protect. The flag keeps the
+            # already-loaded values readable, so no query happens here.
             logger.exception("accepting contact invites failed for user %s", user.id)
 
     # Newly registered = logged in: mint their first token right away.

@@ -11,8 +11,12 @@ from schemas.base import CamelModel
 
 class ContactCreate(CamelModel):
     """POST /api/contacts body: { contactEmail, nickname?, relationship? }
-    The contact must already have a Contact account — the router looks the
-    email up and 404s if there's no matching contact account."""
+
+    The email does NOT need an account. The router looks it up and branches:
+    a Contact account is linked immediately (status "active"); an email with
+    no account at all is INVITED (status "invited") — it gets a signup link
+    and a pending row. Only an email belonging to an account of the wrong
+    role 404s."""
 
     contact_email: EmailStr
     nickname: str | None = None
