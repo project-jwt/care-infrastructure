@@ -105,7 +105,15 @@ export default function App() {
     setAuthView('auth');
     // Drop the params so a refresh (or a later login) doesn't re-open this.
     window.history.replaceState({}, '', window.location.pathname);
-  }, [checking, user]);
+    // `user` is deliberately NOT a dependency: this decides once, when the
+    // token check settles, and must not re-fire when someone later logs OUT
+    // on a URL that still carries the params. Re-firing would auto-open the
+    // prefilled register form the moment they logged out — a
+    // logout-and-continue flow, which is a product decision nobody has made.
+    // Their recovery is to click the link again, which reloads the app and
+    // gets them here with no user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checking]);
 
   const handleAuth = (loggedInUser) => {
     setUser(loggedInUser);
