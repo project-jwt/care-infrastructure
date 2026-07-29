@@ -36,13 +36,8 @@ import {
   updateContact,
   updateInvite,
 } from '../adapters/contacts-adapters';
-import { displayName, formatDate } from '../utils';
+import { displayName, formatDate, isInvited, rowKey } from '../utils';
 import './TrustedContactsList.css';
-
-// Rows come from two id sequences, so neither id alone is a safe React key:
-// an invited row's linkId is null, and a link's id could equal an invite's.
-const rowKey = (c) => (c.status === 'invited' ? `i${c.inviteId}` : `l${c.linkId}`);
-const isInvited = (c) => c.status === 'invited';
 
 export default function TrustedContactsList({ onNavigate }) {
   const [items, setItems] = useState(null); // null = still loading
@@ -112,8 +107,11 @@ export default function TrustedContactsList({ onNavigate }) {
     load();
     setSelected(null);
     setMode('list');
+    // Deliberately doesn't claim they joined: a 404 here also fires when the
+    // invitation was cancelled from another device, and asserting the wrong
+    // cause is worse than naming both. The refreshed list shows which it was.
     setActionError(
-      "That invitation isn't waiting any more — it looks like they've joined. They should be on your list now."
+      "That invitation isn't waiting any more — they may have joined, or it was cancelled. Your list is up to date now."
     );
   };
 

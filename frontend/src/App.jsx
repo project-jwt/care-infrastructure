@@ -112,7 +112,11 @@ export default function App() {
     // logout-and-continue flow, which is a product decision nobody has made.
     // Their recovery is to click the link again, which reloads the app and
     // gets them here with no user.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    //
+    // (No eslint-disable here: this project has no eslint config, so the
+    // directive was inert. This comment is the real explanation — keep it if a
+    // linter is ever added, and re-add the disable then rather than "fixing"
+    // the dependency array.)
   }, [checking]);
 
   const handleAuth = (loggedInUser) => {

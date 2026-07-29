@@ -22,13 +22,11 @@
 import { useEffect, useState } from 'react';
 import { listContacts } from '../adapters/contacts-adapters';
 import { sendSummary } from '../adapters/summaries-adapters';
-import { displayName } from '../utils';
+import { displayName, isInvited, rowKey } from '../utils';
 import './ChooseAction.css';
 
 // Invited people have no contactId, so there is nothing the send endpoint
 // could accept for them — they're shown for continuity, never selectable.
-const rowKey = (c) => (c.status === 'invited' ? `i${c.inviteId}` : `l${c.linkId}`);
-const isInvited = (c) => c.status === 'invited';
 
 export default function ChooseAction({ summaryId, onNavigate, onBusyChange }) {
   const [mode, setMode] = useState('choose'); // choose | pick-contacts | sent
