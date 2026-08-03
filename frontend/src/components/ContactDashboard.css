@@ -219,3 +219,21 @@
 .contact-dashboard__input:read-only {
   background: #f8f9f9;
 }
+
+/* The wrong-role notice: an explanation, not an error — they have a working
+   account, just not the connection they expected. Same warm palette as the
+   auth-form warning that tried to prevent this a screen earlier. */
+.contact-dashboard__notice {
+  width: 100%;
+  color: #7a4b00;
+  background: #fff6e5;
+  border-left: 4px solid #b06f00;
+  padding: 16px;
+  margin-bottom: 16px;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+}
+
+.contact-dashboard__notice p {
+  margin: 0 0 12px;
+}

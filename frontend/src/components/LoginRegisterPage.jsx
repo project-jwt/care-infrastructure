@@ -15,6 +15,10 @@ export default function LoginRegisterPage({
   // email, so a typo here would silently fail to link them.
   initialEmail = '',
   initialRole = 'primary',
+  // The role the invitation was for, when they arrived from an invitation
+  // link. null for an ordinary signup, which is why the warning below can key
+  // off it directly rather than needing a separate "came from a link" flag.
+  inviteRole = null,
 }) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [email, setEmail] = useState(initialEmail);
@@ -76,6 +80,21 @@ export default function LoginRegisterPage({
                 A trusted contact
               </button>
             </fieldset>
+
+            {/* Someone arriving from an invitation link can still switch the
+                role, and picking the other one silently breaks the connection
+                the invitation exists to make: two trusted contacts have no
+                relationship to each other, and a primary registered against a
+                contact invitation leaves the inviter's invitation pending
+                forever. Warn at the moment of the choice — after the fact,
+                the account already exists and the email is spent. */}
+            {inviteRole && role !== inviteRole && (
+              <p className="auth-warning" role="status" aria-live="polite">
+                {inviteRole === 'primary'
+                  ? 'That invitation was for setting up your own account. If you sign up as a trusted contact, you won’t be connected to the person who invited you.'
+                  : 'That invitation was for becoming someone’s trusted contact. If you sign up here for yourself, you won’t be connected to the person who invited you.'}
+              </p>
+            )}
 
             <label>
               Full name

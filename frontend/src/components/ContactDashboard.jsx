@@ -21,7 +21,7 @@ import {
 import { formatDate } from '../utils';
 import './ContactDashboard.css';
 
-export default function ContactDashboard() {
+export default function ContactDashboard({ roleMismatch, onDismissRoleMismatch }) {
   const [items, setItems] = useState(null); // null = still loading
   const [loadError, setLoadError] = useState(null);
   const [selected, setSelected] = useState(null); // open summary, null = list mode
@@ -216,6 +216,34 @@ export default function ContactDashboard() {
   return (
     <main className="contact-dashboard">
       <h1 className="contact-dashboard__heading">Summaries sent to you</h1>
+
+      {/* They followed an invitation meant for setting up their OWN account but
+          registered as a trusted contact, so the connection the invitation
+          existed to make cannot happen — two trusted contacts have no
+          relationship to each other. Without this they'd see a normal empty
+          dashboard and reasonably assume it had worked. */}
+      {roleMismatch && (
+        <div className="contact-dashboard__notice" role="status" aria-live="polite">
+          <p>
+            The invitation you followed was for setting up your own account, so
+            the person who sent it could receive <em>your</em> summaries.
+            You&rsquo;ve signed up as a trusted contact instead, which means
+            you&rsquo;ll receive summaries rather than send them.
+          </p>
+          <p>
+            If you meant to share your own updates, ask them to invite you
+            again and choose &ldquo;Here for myself&rdquo; &mdash; you&rsquo;ll
+            need a different email address, since this one is now in use.
+          </p>
+          <button
+            type="button"
+            className="contact-dashboard__primary"
+            onClick={onDismissRoleMismatch}
+          >
+            Got it
+          </button>
+        </div>
+      )}
 
       {/* Always-mounted live region for the transient states — a live region
           that mounts already holding text is never announced, so the element

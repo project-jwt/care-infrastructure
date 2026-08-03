@@ -49,6 +49,16 @@ export default function App() {
   // Carried from a primary invitation (?contact=…) across authentication: the
   // contact's address the new primary should add. Consumed in handleAuth.
   const [pendingContactEmail, setPendingContactEmail] = useState(null);
+  // Set when someone arrives from an invitation and lands on the prefilled Add
+  // form. Deliberately NOT derived from pendingContactEmail: that is cleared
+  // one render after the contacts screen mounts, which would let the
+  // first-login tutorial pop up over the very form the invitation exists to
+  // prefill. hasCompletedSetup is untouched, so the tour simply runs on their
+  // next visit — connect first, tutorial after.
+  const [deferTutorial, setDeferTutorial] = useState(false);
+  // Set when an invitation's intended role was not the role they registered
+  // with, which silently breaks the connection — see handleAuth.
+  const [roleMismatch, setRoleMismatch] = useState(null);
   // Carried from the recording step to the review step (speak → review flow):
   // the raw transcript and the AI-drafted summary the user will edit/approve.
   const [transcript, setTranscript] = useState('');
@@ -140,9 +150,20 @@ export default function App() {
     // to open, so the address is dropped rather than navigating nowhere.
     if (pendingContactEmail && loggedInUser.role === 'primary') {
       setView('contacts');
-    } else {
-      setView('home');
+      // Hold the first-login walkthrough back until they've had a chance to
+      // press Add. The shell is rendered inert behind that modal, so leaving it
+      // on would make the prefilled form not merely covered but unclickable.
+      setDeferTutorial(true);
+      return;
     }
+    // They had an invitation but registered as the other role. Nothing can be
+    // connected — two trusted contacts have no relationship to each other, and
+    // a primary invited as a contact leaves the inviter's invitation pending —
+    // so say so rather than dropping them on a screen that looks fine.
+    if (invitePrefill && loggedInUser.role !== invitePrefill.role) {
+      setRoleMismatch({ expected: invitePrefill.role, got: loggedInUser.role });
+    }
+    setView('home');
   };
 
   // One-shot: once the contacts screen has been rendered with the prefill, drop
@@ -185,6 +206,7 @@ export default function App() {
         onBack={() => setAuthView('landing')}
         initialEmail={invitePrefill?.email || ''}
         initialRole={invitePrefill?.role || 'primary'}
+        inviteRole={invitePrefill?.role || null}
       />
     );
   }
@@ -195,7 +217,7 @@ export default function App() {
   // who hasn't completed setup. `replayOpen` reruns the same modal on demand
   // from Profile. Contacts have no onboarding (login → dashboard). The modal
   // is self-contained, so it no longer forces a particular view behind it.
-  const firstRun = isPrimary && !user.hasCompletedSetup;
+  const firstRun = isPrimary && !user.hasCompletedSetup && !deferTutorial;
   const showTutorial = firstRun || replayOpen;
 
   // The speak → review → choose-action flow hands per-flow state between
@@ -275,7 +297,19 @@ export default function App() {
     );
   } else {
     // Contacts get one read-only screen; primaries get the view switcher.
-    content = isPrimary ? primaryScreen : <ContactDashboard user={user} />;
+    content = isPrimary ? (
+      primaryScreen
+    ) : (
+      <ContactDashboard
+        user={user}
+        // Backstop for someone who registered as a contact against an
+        // invitation meant for a primary: the connection they were invited to
+        // make cannot exist, and without this they'd see an ordinary empty
+        // dashboard and assume it worked.
+        roleMismatch={roleMismatch?.expected === 'primary' ? roleMismatch : null}
+        onDismissRoleMismatch={() => setRoleMismatch(null)}
+      />
+    );
   }
 
   return (
