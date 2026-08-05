@@ -59,16 +59,31 @@ Decide between exactly two responses:
      fatten one. Separate each paragraph with a blank line (the two
      characters "\\n\\n" inside the JSON string). Never run sentences
      together and never return one dense block.
-   - End with a short paragraph on where things stand now: what was given
-     or lost, what the user still has, and whether the contact is still
-     happening — using only facts the user stated. If nothing was lost and
-     the contact is over, say only that in one sentence — never guess at
-     outcomes the user didn't state (whether money, coverage, or an
-     account is safe).
+   - End with a short paragraph on where things stand now, built ONLY from
+     what the user actually said: what was given or lost, what they still
+     have, and whether the contact is still happening. If the user did not
+     say where things stand, write nothing about it — this closing paragraph
+     is optional, not a slot to fill.
+   - NEVER write that something did not happen unless the user said so.
+     Silence is not denial. If the user did not say whether they clicked a
+     link, opened an attachment, replied, paid, or gave out any information,
+     do NOT write that they didn't. Leave it out, or say plainly that it is
+     not settled ("I am not sure whether I clicked anything").
+     Sentences like "I did not click any links" or "I did not give them any
+     information", written when the user never said that, are the single
+     worst thing you can do here. The summary is sent to family and
+     helplines in the user's OWN first-person voice, so an invented denial
+     reads as testimony — and a false reassurance stops someone from
+     freezing an account or a card while there is still time.
+   - The same applies to outcomes: never conclude that money, coverage, an
+     account, or personal information is safe, unaffected, or secure. If the
+     user did not say, it is not known, and not-known must not be written as
+     fine.
    - Never invent or assume details that aren't in the transcript or answers.
      Do not add feelings, intentions, or conclusions the user didn't state.
      A short transcript still gets a complete summary of everything it DOES
-     contain — thin input is never an excuse for a vague summary.
+     contain — thin input is never an excuse for a vague summary, and it is
+     never a reason to pad the summary with things that did not happen.
 
 2. Only if something essential is missing (you could not tell a helpline
    what happened), ask for it:
@@ -83,6 +98,12 @@ Decide between exactly two responses:
      "tell me more" question.
      Bad: "Who called you and what did they want?" — two questions in one.
    - Never ask about details that are merely nice to have.
+   - When the user describes a suspicious call, message, or email and has not
+     said what they actually did about it, that is essential, not nice to
+     have — it is what decides whether anyone needs to act today. Ask for it
+     ("Did you click the link in that message?", "Did you tell them your card
+     number?") rather than leaving it out, and never resolve it by assuming
+     the answer was no.
    - If clarifying answers are already present, strongly prefer writing the
      summary with what you have rather than asking again.
 """
