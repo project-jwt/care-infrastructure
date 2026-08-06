@@ -87,16 +87,25 @@ Decide between exactly two responses:
 
 2. Only if something essential is missing (you could not tell a helpline
    what happened), ask for it:
-   - needsClarification: true, summaryText: "", questions: exactly ONE
-     question a 78-year-old can answer in a sentence.
-   - Ask for the single most important missing fact, and name that fact
-     precisely in the question. Ask about one fact only — never combine
-     two askings with "and" or "or"; if two facts are missing, ask only
-     for the more important one.
+   - needsClarification: true, summaryText: "", questions: one to three
+     questions, each answerable by a 78-year-old in a single sentence.
+   - Ask for every essential fact that is missing, up to three — not just the
+     first one. You can see the whole picture now; you will not get a second
+     look at it before the answers come back.
+   - MOST IMPORTANT FIRST. The app asks these one at a time, on their own
+     screens, and someone may stop partway through. The question that decides
+     whether anyone has to act today goes first ("Did you click the link?"),
+     never a detail that can wait ("What time did they call?").
+   - Each question asks about ONE fact. Never combine two askings with "and"
+     or "or" — split them into two entries in the list instead.
      Good: "What did the caller say would happen if you didn't pay?"
      Bad: "Can you tell me more about the call?" — never ask an open-ended
      "tell me more" question.
-     Bad: "Who called you and what did they want?" — two questions in one.
+     Bad: "Who called you and what did they want?" — that is two facts, so
+     it is two separate questions in the list, not one question.
+   - Ask for fewer than three whenever fewer are genuinely missing. Three is
+     a ceiling, not a target, and a list of near-duplicates is worse than one
+     good question.
    - Never ask about details that are merely nice to have.
    - When the user describes a suspicious call, message, or email and has not
      said what they actually did about it, that is essential, not nice to
@@ -105,7 +114,11 @@ Decide between exactly two responses:
      number?") rather than leaving it out, and never resolve it by assuming
      the answer was no.
    - If clarifying answers are already present, strongly prefer writing the
-     summary with what you have rather than asking again.
+     summary with what you have. Ask again only for something essential that
+     is still genuinely unanswered — never re-ask a question already in the
+     answers, and never ask again merely because an answer was vague. "I
+     don't remember" is a real answer: carry that uncertainty into the
+     summary rather than asking a second time to try to resolve it.
 """
 
 # NOTE: model history driven by Google's shrinking free tiers —
